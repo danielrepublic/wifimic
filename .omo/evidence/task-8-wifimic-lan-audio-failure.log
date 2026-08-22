@@ -28,3 +28,12 @@ Result:
     ufw-state=active
 
 No temporary firewall rules, test services, test packets, or extra firewall backend were left behind. The intended UFW allow/deny rules and user unit remain installed.
+
+## Reconciliation of the initial 203/EXEC result (2026-08-22T08:45:14.8453280Z)
+
+The earlier `203/EXEC` was a genuine missing-binary prerequisite, not a passing service result. The pushed repository was inspected without credentials; its `origin/main` snapshot was archived locally, transferred to a temporary remote build directory, and built on Arch with:
+    cargo build --release -p wifimic_server --locked
+
+The resulting real ELF binary was installed at `~/.local/bin/wifimic_server`. The temporary source archive, build directory, and upload file were removed. A repeat of the exact systemd verification then passed, and the service remained `active`.
+
+Third-source limitation remains: no third reachable LAN address was available. The UFW deny rule and zero drop counter are recorded; no synthetic source or fake success was used.

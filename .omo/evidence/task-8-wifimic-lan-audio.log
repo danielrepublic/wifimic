@@ -40,3 +40,20 @@ Result:
     ip saddr 192.168.0.200 udp dport 6902 counter packets 1 bytes 38 accept
     udp dport 6902 counter packets 0 bytes 0 drop
     The one accepted counter increment proves the permitted peer/port scope.
+
+## Reconciled final verification (2026-08-22T08:45:14.8453280Z)
+
+Command:
+    ssh arch-daniel "systemd-analyze --user verify ~/.config/systemd/user/wifimic-server.service"
+    ssh arch-daniel "systemctl --user daemon-reload; systemctl --user start wifimic-server; systemctl --user is-active wifimic-server"
+
+Result:
+    `systemd-analyze --user verify` produced no output and exited 0.
+    `systemctl --user is-active wifimic-server` returned `active`.
+    `file ~/.local/bin/wifimic_server` returned an ELF 64-bit x86-64 GNU/Linux executable.
+
+The real binary was built on arch-daniel from a credential-free `git archive origin/main` snapshot (origin/main=`047e2cc2c1b9762e62753adeda74ceb17b91bf8c`), not fabricated or replaced with a test executable.
+
+Final backend state was literal: `ufw.service=active`, `iptables.service=inactive`, `nftables.service=inactive`. UFW remained the sole packet-filtering manager. Its live chain showed:
+    ip saddr 192.168.0.200 udp dport 6902 counter packets 1 bytes 38 accept
+    udp dport 6902 counter packets 0 bytes 0 drop
