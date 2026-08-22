@@ -1,0 +1,11 @@
+Todo 10 — exact endpoint failure evidence
+Date: 2026-08-22
+
+Command:
+cargo test -p wifimic_client --lib --target x86_64-pc-windows-gnu --features windows render_misspelled_endpoint_returns_typed_not_found_error -- --nocapture
+
+Result:
+test render::tests::render_misspelled_endpoint_returns_typed_not_found_error ... ok
+test result: ok. 1 passed; 0 failed
+
+The test supplies `CABLE Input (VB-Audio Virtual Cabl)` and confirms `RenderError::EndpointNotFound`; endpoint selection does not fall back to the first or system-default device.

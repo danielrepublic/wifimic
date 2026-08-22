@@ -1,0 +1,22 @@
+Todo 10 — verified WASAPI render evidence
+Date: 2026-08-22
+
+Host preflight:
+- `CABLE Input (VB-Audio Virtual Cable)` was present in the live render endpoint enumeration.
+- `ffmpeg not found`; no external loopback capture was available.
+
+Command:
+cargo test -p wifimic_client --lib --target x86_64-pc-windows-gnu --features windows render_live_enumeration_finds_verified_vb_cable_endpoint -- --ignored --nocapture
+
+Result:
+test render::tests::render_live_enumeration_finds_verified_vb_cable_endpoint ... ok
+test result: ok. 1 passed; 0 failed
+
+Command:
+cargo test -p wifimic_client --lib --target x86_64-pc-windows-gnu --features windows render_live_vb_cable_accepts_one_khz_tone -- --ignored --nocapture
+
+Result:
+test render::tests::render_live_vb_cable_accepts_one_khz_tone ... ok
+test result: ok. 1 passed; 0 failed; finished in 4.05s
+
+The live test opened the exact configured VB-CABLE endpoint, wrote 400 synthetic 1 kHz frames, and stopped cleanly. CABLE Output loopback capture and payload-frequency confirmation were not possible on this host.
