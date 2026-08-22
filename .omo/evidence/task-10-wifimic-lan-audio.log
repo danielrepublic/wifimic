@@ -20,3 +20,28 @@ test render::tests::render_live_vb_cable_accepts_one_khz_tone ... ok
 test result: ok. 1 passed; 0 failed; finished in 4.05s
 
 The live test opened the exact configured VB-CABLE endpoint, wrote 400 synthetic 1 kHz frames, and stopped cleanly. CABLE Output loopback capture and payload-frequency confirmation were not possible on this host.
+
+Binary wiring verification:
+- `apps/wifimic_client/src/main.rs` contains exactly one each of `pub mod jitter;`, `pub mod logging;`, and `pub mod render;`.
+- The existing jitter and logging declarations and startup code were preserved; no renderer internals were changed.
+
+Command:
+cargo test -p wifimic_client render -- --nocapture
+
+Result:
+- Library target: 9 passed, 2 ignored.
+- Binary target: 9 passed, 2 ignored, including exact endpoint selection, no-fallback endpoint failure, stereo fan-out, buffer capacity, and event timeout tests.
+
+Command:
+cargo build --workspace
+
+Result:
+Finished successfully.
+
+Command:
+cargo clippy --workspace --all-targets -- -D warnings
+
+Result:
+Finished successfully.
+
+The CABLE Output loopback criterion remains unverified because `ffmpeg` and an alternate loopback capture tool are unavailable; the live render/open/write result above is not being represented as payload capture proof.
