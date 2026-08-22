@@ -7,9 +7,10 @@ readonly DEFAULT_BINARY_PATH="${HOME}/.local/bin/wifimic_server"
 readonly DEFAULT_UNIT_PATH="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user/wifimic-server.service"
 readonly UPDATE_TIMEOUT_SECONDS="${WIFIMIC_UPDATE_TIMEOUT_SECONDS:-300}"
 readonly HEALTH_TIMEOUT_SECONDS="${WIFIMIC_HEALTH_TIMEOUT_SECONDS:-45}"
-readonly SMOKE_HOST="${WIFIMIC_SMOKE_HOST:-127.0.0.1}"
-readonly SMOKE_PORT="${WIFIMIC_SMOKE_PORT:-6902}"
-readonly SMOKE_BIND_ADDRESS="${WIFIMIC_SMOKE_BIND_ADDRESS:-}"
+# arch-daniel listens on 192.168.0.210:6902 and the server admits only
+# datagrams sourced by the Windows peer 192.168.0.200. Localhost is invalid.
+readonly SMOKE_HOST="192.168.0.210"
+readonly SMOKE_PORT="6902"
 readonly SMOKE_HELPER="${WIFIMIC_CONTROL_SMOKE_HELPER:-}"
 
 REPO_ROOT=""
@@ -201,8 +202,11 @@ REVISION="$1"
     die 'revision must be a non-empty tag or commit, not an option or whitespace-containing value'
 validate_positive_integer WIFIMIC_UPDATE_TIMEOUT_SECONDS "$UPDATE_TIMEOUT_SECONDS"
 validate_positive_integer WIFIMIC_HEALTH_TIMEOUT_SECONDS "$HEALTH_TIMEOUT_SECONDS"
-[[ "$SMOKE_PORT" =~ ^[1-9][0-9]{0,4}$ && "$SMOKE_PORT" -le 65535 ]] || die 'WIFIMIC_SMOKE_PORT must be a valid UDP port'
 [[ "$BINARY_PATH" = /* && "$UNIT_PATH" = /* ]] || die 'binary and unit paths must be absolute'
+[[ -n "$SMOKE_HELPER" ]] || die \
+    'WIFIMIC_CONTROL_SMOKE_HELPER is required: configure a peer-originated Start/Heartbeat/Stop Ack probe'
+[[ "$SMOKE_HELPER" = /* && -f "$SMOKE_HELPER" && -x "$SMOKE_HELPER" ]] || \
+    die 'WIFIMIC_CONTROL_SMOKE_HELPER must be an executable absolute path'
 
 TIMEOUT_BIN="$(command -v timeout || true)"
 SYSTEMCTL_BIN="$(command -v systemctl || true)"
@@ -212,7 +216,6 @@ command -v git >/dev/null 2>&1 || die 'git is required'
 command -v cargo >/dev/null 2>&1 || die 'cargo is required to build wifimic_server'
 command -v sha256sum >/dev/null 2>&1 || die 'sha256sum is required'
 command -v file >/dev/null 2>&1 || die 'file is required to validate the built binary'
-[[ -z "$SMOKE_HELPER" || -x "$SMOKE_HELPER" ]] || die 'WIFIMIC_CONTROL_SMOKE_HELPER is not executable'
 
 REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null)" || \
     die 'the updater must run from a Git checkout'
@@ -293,47 +296,8 @@ if ! wait_for_service_active "$HEALTH_TIMEOUT_SECONDS"; then
     die 'candidate service did not become active within the health bound'
 fi
 
-if [[ -n "$SMOKE_HELPER" ]]; then
-    run_control_smoke_or_die "$HEALTH_TIMEOUT_SECONDS" 'control-session smoke helper' \
-        "$SMOKE_HELPER" "$SMOKE_HOST" "$SMOKE_PORT"
-else
-    python3_bin="$(command -v python3 || true)"
-    [[ -n "$python3_bin" ]] || die 'python3 is required for the built-in control-session smoke'
-    run_control_smoke_or_die "$HEALTH_TIMEOUT_SECONDS" 'control-session smoke' \
-        "$python3_bin" - "$SMOKE_HOST" "$SMOKE_PORT" "$SMOKE_BIND_ADDRESS" <<'PY'
-import socket
-import sys
-import time
-
-host = sys.argv[1]
-port = int(sys.argv[2])
-bind_address = sys.argv[3]
-session = (time.time_ns() // 1_000_000) & ((1 << 64) - 1)
-if session == 0:
-    session = 1
-
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.settimeout(4)
-if bind_address:
-    sock.bind((bind_address, 0))
-
-def exchange(tag):
-    packet = bytes((tag, 1)) + session.to_bytes(8, "big")
-    sock.sendto(packet, (host, port))
-    response, _ = sock.recvfrom(64)
-    expected = bytes((4, 1)) + session.to_bytes(8, "big") + bytes((tag,))
-    if response != expected:
-        raise RuntimeError(f"unexpected control Ack for tag {tag}: {response.hex()}")
-
-try:
-    exchange(1)
-    exchange(2)
-    exchange(3)
-finally:
-    sock.close()
-print("wifimic-control-smoke: PASS")
-PY
-fi
+run_control_smoke_or_die "$HEALTH_TIMEOUT_SECONDS" 'peer-originated control-session smoke' \
+    "$SMOKE_HELPER" "$SMOKE_HOST" "$SMOKE_PORT"
 
 printf 'wifimic server update succeeded\nrevision=%s\nprior_binary_sha256=%s\nprior_unit_sha256=%s\n' \
     "$staged_revision" "$prior_hash" "$unit_hash"
