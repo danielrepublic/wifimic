@@ -1,5 +1,6 @@
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
+use std::time::Duration;
 
 /// The fixed UDP port shared by the server's control and audio datagrams.
 pub const SERVER_PORT: u16 = 6_902;
@@ -87,6 +88,16 @@ impl UdpServerSocket {
             source,
             payload: self.receive_buffer[..received].to_vec(),
         }))
+    }
+
+    /// Sets the bounded receive wait used to service control-plane timers.
+    pub fn set_read_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
+        self.socket.set_read_timeout(timeout)
+    }
+
+    /// Sends one control response to the source port of the accepted command.
+    pub fn send_to(&self, payload: &[u8], destination: SocketAddr) -> io::Result<usize> {
+        self.socket.send_to(payload, destination)
     }
 }
 
