@@ -1,0 +1,19 @@
+Task 5 failure-path and environment evidence
+=============================================
+
+Typed missing-source failure:
+- Command: cargo test -p wifimic_server missing_endpoint_is_a_typed_error_without_default_substitution -- --nocapture
+- Result: passed; the fake parec-shaped process returned EndpointNotFound for the pinned source and the handle had no running process afterward.
+
+Unavailable live-source smoke:
+- Command: ssh arch-daniel "cargo test -p wifimic_server capture_adapter_starts_and_stops_real_source -- --ignored"
+- Result: unavailable because the SSH default directory is /home/daniel and contains no Cargo.toml.
+- Follow-up discovery found no /home/daniel/*wifimic*/Cargo.toml checkout to run from.
+- No real capture process was started.
+
+Out-of-scope workspace gate limitations preserved:
+- cargo clippy --workspace --all-targets -- -D warnings failed in pre-existing apps/wifimic_client/src/jitter.rs large_enum_variant and new_without_default diagnostics. The required server-only clippy command passed.
+- cargo fmt --all -- --check could not resolve the pre-existing missing apps/wifimic_client/src/jitter/tests.rs module and reported unrelated client formatting. The server package format check passed.
+
+Cleanup:
+- No real or fake child process remains; the ignored hardware smoke was not started.
