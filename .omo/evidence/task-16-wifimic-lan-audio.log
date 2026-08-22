@@ -1,0 +1,30 @@
+Task 16 — explicit-revision Linux server updater
+Date: 2026-08-22
+Baseline checkout commit: 52a3e98e83b65ca13f8cab82836028f45bb606b3
+Updater SHA-256: d43326f99d2437a2b8cc8630b7fdb7fb85040de7e215e85c48aa4b203fadf798
+
+Implementation receipt:
+- Added deploy/linux/update-wifimic-server.sh.
+- Requires exactly one explicit tag or hexadecimal commit; rejects options, whitespace-containing revisions, extra arguments, invalid tags, and dirty source checkouts before deployment mutation.
+- Fetches only the requested revision when it is not already local, stages it in a detached temporary worktree, runs the real `cargo build --release --bin wifimic_server`, validates `file`/SHA-256, and removes the worktree in the EXIT trap.
+- Snapshots the prior executable, user unit, SHA-256 values, and file metadata before setting the mutation guard. The binary swap is same-directory copy-plus-atomic-mv; rollback restores binary/unit and uses only `systemctl --user`.
+- Candidate health requires bounded `systemctl --user restart`, bounded `systemctl --user is-active`, and a complete Start/Heartbeat/Stop Ack smoke. Helper probes must emit `wifimic-control-smoke: PASS`; a successful send alone is not accepted.
+- No firewall, PipeWire/capture, or service configuration is changed on the success path.
+
+Syntax verification:
+- `C:\Program Files\Git\bin\bash.exe -n deploy/linux/update-wifimic-server.sh` — PASS.
+- `cargo test --workspace` — PASS: 30+34+5+11+18 tests passed; 5 hardware/environment tests ignored as documented.
+
+Faithful isolated harness verification (no live claim):
+- Harness used a clean temporary Git repository with real detached worktrees and fake bounded `cargo`, `systemctl`, `file`, and `python3` commands; the updater remained unchanged and the harness was removed afterward.
+- Good tag revision: 5d6f165c9b1f25bf29b35ceae34df5ce838808cb.
+- Deliberately bad tag revision: b7ab7ccd5c0f1c211ed9a6b8ad3983fcc9819eaf.
+- Prior known-good binary hash before good update: f6c2ec34d21d4b1d2b2af65ddb5d317602fb36c0c9ffac34fab27bea1547fccf.
+- Prior user-unit hash: 21a725b9d9b2dec0299cb5dbf5df4fdc82bfe3f7300eb756f3f9819da32a1a2f.
+- Candidate hash after good update: 6ea78ba08269b808abaac4cb8eaa786bbd559cb37c3aa0eb079c4723911d14e8.
+- Bad-tag smoke failure restored the candidate hash above and left fake service state `active`.
+- Deliberate build failure left the same binary hash and `active` state.
+- Every harness case asserted an empty temporary staging directory after exit; the final workspace temp-scan found no `.task-16-harness.*` or `wifimic-server-update.*` directories.
+
+External limitation:
+- No live `arch-daniel` update was attempted. The current Windows checkout has unrelated orchestration dirt, and the production server's exact source-IP gate requires a control smoke originating from peer `192.168.0.200`; localhost cannot honestly prove that path. No live service success, capture health, or rollback result is claimed.
