@@ -24,6 +24,12 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 - Injected `Instant` values make the rate limiter boundary, reset, and 1000-event heartbeat-timeout burst deterministic; the configured one-second gate admits exactly one event from the 0–999 ms burst.
 - Rust LSP timed out as expected from prior workspace guidance; package tests, Clippy with `-D warnings`, workspace build, and crate documentation all passed.
 
+## 2026-08-22
+
+- The adaptive client jitter buffer keeps protocol sequence arithmetic in `wifimic_protocol::classify_sequence`, uses an explicit 5 ms playout slot, and bounds resident storage to the derived 41-slot maximum for the 200 ms ceiling.
+- Gap, reordered, late, duplicate, and session-mismatch insertion outcomes are typed; the renderer-facing poll result carries either decoded PCM metadata or an explicit gap slot for silence concealment.
+- Deterministic injected arrival/planned-playout times make steady, bursty-loss, bursty-late, wraparound, reset, maximal-gap, growth, decay, and ceiling tests reproducible without sockets or sleeps.
+
 ## 2026-08-22T09:00:00Z
 
 - The server capture adapter is safest as a small public `CaptureHandle` facade over a private process launcher and injected reader/clock seams: `start` remains the only spawn boundary, `read_frame` fills exactly `PCM_PAYLOAD_BYTES`, and `stop` is idempotent.
