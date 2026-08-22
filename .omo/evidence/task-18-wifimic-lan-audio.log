@@ -1,0 +1,127 @@
+# Task 18 Evidence Log — wifimic-lan-audio
+
+## Command Extraction & Validation Summary
+
+### Bash Commands Validated (via `bash -n` with Git Bash)
+All bash command blocks from `docs/deployment.md` passed syntax validation:
+- Section 3.1: git clone, cd
+- Section 4.1: rustup show, cargo build --release --bin wifimic_server, mkdir, cp, file
+- Section 4.2: pactl list short sources, pactl list sources | grep
+- Section 4.3.1: mkdir, cp
+- Section 4.3.2: loginctl enable-linger, loginctl show-user
+- Section 4.3.3: systemctl --user daemon-reload, systemctl --user enable --now
+- Section 4.3.4: systemctl --user status, journalctl --user -u -f
+- Section 4.4.1: sudo bash deploy/linux/wifimic-server-firewall.sh
+- Section 4.4.3: ufw status numbered, nft list chain, iptables -C
+- Section 4.5.1: systemctl --user is-active, journalctl --user -u -f
+- Section 4.5.3: ufw status numbered | grep, nft list chain, iptables -v -n -L | grep
+- Section 6.2: cd, WIFIMIC_CONTROL_SMOKE_HELPER=... ./deploy/linux/update-wifimic-server.sh v1.2.3, same with commit hash
+- Section 6.5: systemctl --user is-active, file, sha256sum, journalctl --user -u -f
+- Section 8.1: systemctl --user is-active, journalctl --user -u --since | grep, ufw status numbered | grep
+- Section 9.2: systemctl --user status, loginctl show-user, systemctl --user daemon-reload, systemctl list-units, ufw delete, ufw reload, export, ls, git status, git stash
+- Section 9.3: ping, systemctl --user is-active, ufw status numbered | grep, pactl list sources | grep, journalctl --user -u -f
+- Section 9.4: systemctl --user start
+- Section 10.1: systemctl --user disable --now, rm, systemctl --user daemon-reload, ufw delete, ufw reload, sudo nft delete, sudo iptables -D, sudo iptables-save | sudo tee, sudo systemctl restart, loginctl disable-linger
+
+### PowerShell Commands Validated (parsed without syntax errors)
+All PowerShell command blocks from `docs/deployment.md` parsed correctly:
+- Section 3.2: git clone, cd
+- Section 4.5.2: New-Object System.Net.Sockets.UdpClient, Connect, Send, Close
+- Section 5.1: Get-PnpDevice, ls
+- Section 5.2: cd, .\deploy\windows\install-wifimic-client.ps1 with -ClientExecutable, -RenderEndpoint, -DryRun
+- Section 5.3: .\deploy\windows\install-wifimic-client.ps1 with -TestMode
+- Section 5.4: cd, .\deploy\windows\install-wifimic-client.ps1 with -AcceptHostMutation
+- Section 5.5: Get-ScheduledTask, ls, Get-NetFirewallRule | Get-NetFirewallPortFilter, Get-NetFirewallRule | Get-NetFirewallAddressFilter, Get-PnpDevice
+- Section 7.2: cd, .\deploy\windows\update-wifimic-client.ps1 -Tag -AcceptHostMutation (tag and commit hash)
+- Section 7.3: .\deploy\windows\update-wifimic-client.ps1 -Tag -TestMode
+- Section 7.6: Get-ScheduledTask, SHA256 computation, Get-PnpDevice
+- Section 8.2: Get-ScheduledTask, Get-NetFirewallRule, Get-NetFirewallPortFilter, Get-NetFirewallAddressFilter, Get-PnpDevice
+- Section 9.1: Get-PnpDevice, Restart-Service, security principal check, Get-ScheduledTask, Get-NetFirewallRule, Get-NetFirewallAddressFilter, schtasks /Run, git status, git tag, git fetch
+- Section 10.2: schtasks /Delete, Remove-NetFirewallRule, Remove-Item
+
+### Script Syntax Validation
+- `deploy/linux/update-wifimic-server.sh`: `bash -n` ✓
+- `deploy/linux/wifimic-server-firewall.sh`: `bash -n` ✓
+- `deploy/windows/install-wifimic-client.ps1`: PowerShell parse ✓ (runtime validation error on dummy endpoint expected)
+- `deploy/windows/update-wifimic-client.ps1`: PowerShell parse ✓ (TestMode runs and produces JSON receipt)
+
+### Cross-Reference Verification
+All documented values match source scripts:
+| Value | Documented | Source |
+|-------|------------|--------|
+| Linux IP | 192.168.0.210 | network.rs:16, firewall.sh:4 |
+| Windows IP | 192.168.0.200 | network.rs:16, firewall.sh:4 |
+| UDP Port | 6902 | network.rs:5, firewall.sh:5 |
+| PipeWire Source | alsa_input.pci-0000_00_1b.0.analog-stereo | capture_types.rs:6 |
+| parec params | --raw --format=s16le --rate=48000 --channels=1 --latency-msec=5 --process-time-msec=5 --device=... | capture_types.rs:9-17 |
+| Install Root | C:\Program Files\wifimic-client | install.ps1:18 |
+| Executable | wifimic_client.exe | install.ps1:19 |
+| Task Folder | \wifimic\ | install.ps1:20 |
+| Task Name | wifimic-client | install.ps1:21 |
+| Task Path | \wifimic\wifimic-client | install.ps1:22 |
+| Firewall DisplayName | wifimic-client | install.ps1:23 |
+| Firewall RemoteAddress | 192.168.0.210/32 | install.ps1:24 |
+| Firewall Port | 6902 | install.ps1:25 |
+| Render Endpoint | CABLE Input (VB-Audio Virtual Cable) | install.ps1:26 |
+| Service Name | wifimic-server | systemd unit |
+| Binary Path | ~/.local/bin/wifimic_server | systemd unit ExecStart |
+| systemd Unit Path | ~/.config/systemd/user/wifimic-server.service | update.sh:7 |
+
+### Forbidden String Scan
+- `/home/daniel/.psw`: **NOT FOUND**
+- `password`/`token`/`secret`/`credential`: Only appears as `InteractiveToken` (Windows logon type, not a credential)
+- No credentials or secrets in document
+
+### Language Verification
+- All user-facing prose: Traditional Chinese ✓
+- Code identifiers, commands, paths, literal output: Unchanged (English/ASCII) ✓
+- No Simplified Chinese prose detected ✓
+
+### DryRun/TestMode Labeling
+- All DryRun commands explicitly labeled `-DryRun` with "不寫入任何系統狀態" note ✓
+- All TestMode commands explicitly labeled `-TestMode` with "不觸碰真實系統" note ✓
+- Native commands explicitly require `-AcceptHostMutation` + "系統管理員互動式工作階段" ✓
+- No fake/test-mode command presented as production install ✓
+
+### Rollback Behavior Documented
+- Linux updater: `on_exit` trap restores binary/unit, daemon-reload, restarts service, verifies active ✓
+- Windows updater: Restores executable bytes, task XML, enables/starts task, verifies hash/XML/state ✓
+- Installer: Restores task/firewall/file/install-root on failure, verifies prior state ✓
+
+### Troubleshooting Order
+- Section 9.3 explicitly states "先排查 Windows 端（用戶端），再排查 Linux 端（伺服器）" ✓
+- Windows-before-Linux diagnosis for server-unreachable documented ✓
+
+## Verification Commands Executed
+```bash
+# Bash syntax check
+"C:\Program Files\Git\bin\bash.exe" -n test_bash_syntax.sh
+# Exit code: 0 (no output = success)
+
+# PowerShell syntax check  
+powershell.exe -NoProfile -Command "& { . 'test_powershell_syntax.ps1' }"
+# Parsed successfully (runtime errors only for non-existent objects)
+
+# Script syntax checks
+"C:\Program Files\Git\bin\bash.exe" -n deploy/linux/update-wifimic-server.sh
+"C:\Program Files\Git\bin\bash.exe" -n deploy/linux/wifimic-server-firewall.sh
+powershell.exe -NoProfile -Command "& { . 'deploy/windows/install-wifimic-client.ps1' -DryRun ... }"
+powershell.exe -NoProfile -Command "& { . 'deploy/windows/update-wifimic-client.ps1' -Tag v1.0.0 -TestMode }"
+# All parsed without syntax errors
+```
+
+## Files Created/Modified
+- `docs/deployment.md` — Created (724 lines, Traditional Chinese)
+- `.omo/evidence/task-18-wifimic-lan-audio.log` — This file
+- `.omo/evidence/task-18-wifimic-lan-audio-failure.log` — Empty (no failures)
+
+## Notepad Updates
+Appended to `.omo/notepads/wifimic-lan-audio/learnings.md`:
+- Task 18 guide writing: every command cross-checked against real artifacts; no doc-only values invented
+- Forbidden-string checks must run against final text
+- Git Bash provides working `bash -n` on Windows host
+- UFW example output avoids hard-coded rule numbers
+
+---
+*Generated: 2026-08-22*
+*Task: Todo 18 — End-to-end two-machine deployment guide*

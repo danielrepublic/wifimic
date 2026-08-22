@@ -128,3 +128,14 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 ## 2026-08-22
 
 - Task 17 verification found that resolving before fetching rejected a valid remote-only explicit revision. The fake operation now withholds its revision until `FetchTags`, locking the required `GetSourceStatus, FetchTags, ResolveRevision` order while preserving bounded failure cleanup.
+
+## 2026-08-22
+
+- Task 18 guide writing: every command in `docs/deployment.md` was cross-checked against the real artifacts — Linux deployment from `docs/deployment-linux.md`, Windows installer `install-wifimic-client.ps1`, Linux updater `update-wifimic-server.sh`, Windows updater `update-wifimic-client.ps1` — so no doc-only values were invented.
+- All bash command blocks validated with `bash -n` via Git Bash (`C:\Program Files\Git\bin\bash.exe`); all PowerShell command blocks parsed without syntax errors.
+- Forbidden-string scan confirmed zero occurrences of `/home/daniel/.psw`, credentials, or secrets in the final document.
+- Traditional Chinese prose verified throughout; code identifiers, commands, paths, and literal output remain unchanged.
+- DryRun/TestMode commands explicitly labeled and never presented as production installs; native operations require explicit `-AcceptHostMutation` + interactive admin session.
+- Rollback behavior documented for all three scripts (installer, Linux updater, Windows updater) with exact restoration steps.
+- Troubleshooting section explicitly orders Windows-before-Linux diagnosis for server-unreachable scenarios.
+- UFW example output avoids hard-coded rule numbers (allow inserted at priority 1, deny appended).
