@@ -24,6 +24,13 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 - Injected `Instant` values make the rate limiter boundary, reset, and 1000-event heartbeat-timeout burst deterministic; the configured one-second gate admits exactly one event from the 0–999 ms burst.
 - Rust LSP timed out as expected from prior workspace guidance; package tests, Clippy with `-D warnings`, workspace build, and crate documentation all passed.
 
+## 2026-08-22T08:30:00Z
+
+- Client rotation stores a typed metadata header (`wifimic-diagnostics-v1` plus creation seconds), so age pruning is deterministic with an injected clock and corrupt headers produce typed skip warnings rather than aborting the pass.
+- `DiagnosticLogSink` accepts only `wifimic_diagnostics::EventRecord` through `EventSink`; its metadata-only test confirms the serialized output contains no PCM, payload, or sample fields.
+- Rotation tests use RAII temp directories with unique process/counter names; the cleanup receipt found no `wifimic-client-logging-*` directories remaining under the Windows temp root.
+- Evidence for Task 14: targeted age/size test, corrupt-metadata failure-path test, full client tests, workspace build, and workspace Clippy all passed. Rust LSP diagnostics timed out; Cargo remained authoritative.
+
 ## 2026-08-22
 
 - The adaptive client jitter buffer keeps protocol sequence arithmetic in `wifimic_protocol::classify_sequence`, uses an explicit 5 ms playout slot, and bounds resident storage to the derived 41-slot maximum for the 200 ms ceiling.

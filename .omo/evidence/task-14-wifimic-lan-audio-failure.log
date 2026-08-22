@@ -1,0 +1,7 @@
+Task 14 failure-path evidence
+
+Command: cargo test -p wifimic_client corrupt_log_metadata_is_reported_and_does_not_abort_rotation
+Result: PASS — 1 passed, 0 failed; corrupt metadata was skipped with a typed warning and valid entries remained processable.
+
+Command: lsp_diagnostics on changed Rust files
+Result: TIMEOUT — Rust LSP daemon did not respond; Cargo build/test/Clippy checks passed.
