@@ -60,3 +60,8 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 - The client renderer can be tested independently of the incomplete binary entrypoint by exposing `render` from `apps/wifimic_client/src/lib.rs`; the Windows-targeted library suite passed 9 deterministic tests, with the two hardware tests remaining explicitly ignored by default.
 - On this Windows host, live WASAPI endpoint enumeration found `CABLE Input (VB-Audio Virtual Cable)`, and the live renderer accepted and stopped after writing 400 synthetic 1 kHz frames to that exact endpoint.
 - The available live test verifies endpoint opening and frame writes, but does not capture `CABLE Output`; no loopback capture tool is installed (`ffmpeg not found`), so the acoustic/payload confirmation remains unverified. Rust LSP timed out again after the focused Cargo checks passed.
+
+## 2026-08-22
+
+- The capture module stays API-compatible when `CaptureHandle` remains the facade and the public types/errors, frame reader, and `parec` process seam move into sibling private modules; `pub(super)` test seams avoid exposing implementation details.
+- Measuring pure LOC after extraction gave 102 for `capture.rs`, 88 for `capture_types.rs`, 39 for `capture_reader.rs`, and 114 for `capture_process.rs`, all below the repository's 250-LOC ceiling.
