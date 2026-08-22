@@ -139,3 +139,33 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 - Rollback behavior documented for all three scripts (installer, Linux updater, Windows updater) with exact restoration steps.
 - Troubleshooting section explicitly orders Windows-before-Linux diagnosis for server-unreachable scenarios.
 - UFW example output avoids hard-coded rule numbers (allow inserted at priority 1, deny appended).
+
+## 2026-08-22T17:30:00Z
+
+- Fixed documentation typo in `docs/deployment.md` line 189: `uff` → `ufw` in the UFW persistence sentence. Verified via `git diff --check` (clean), focused search confirms no `uff` remains and `ufw` wording is correct. Committed as `7c5cde3` and pushed to `origin/main`.
+2026-08-22 Todo 20: Added four-timestamp calibration on the existing UDP path. Accepted round trips are limited to 20,000 us, recalibration is scheduled every 30 s, offsets changing by more than 5,000 us emit `ClockInstabilityWarning`, and audio frames carry a Unix-microsecond timestamp sampled before the pinned capture read. Local protocol/server/client tests passed, but no live latency statistics were produced.
+2026-08-22 Todo 20 correction: Todo 3's 494-byte audio wire contract must remain immutable. A per-frame capture timestamp cannot be added to `AudioFrame` in this todo; the unresolved cross-host timestamp transport limitation is recorded rather than hidden behind a protocol change. Calibration reply sequence matching now rejects stale replies before offset updates.
+
+## 2026-08-22 Todo 21
+
+- The real read-only preflight queried the canonical Windows task `\wifimic\wifimic-client`, the Program Files install root, and both client process spellings. At `2026-08-22T21:19:47.4240146+08:00`, the task, install root, and exact client process were all absent; VB-CABLE Input and Output were present.
+- At `2026-08-22T21:20:37,302525414+08:00`, `arch-daniel` reported `wifimic-server=active`, MainPID 33601, and UDP `0.0.0.0:6902` listening. This Linux fact cannot satisfy the two-host lifecycle without the missing Windows artifacts.
+- Because the required installed artifacts were absent and host mutation was not authorized, no tray/task interaction, logout, task registration, executable installation, or remote service mutation was attempted. The paired Task 21 evidence records every acceptance criterion as FAIL rather than substituting mocks.
+
+## 2026-08-22 Todo 22
+
+- The reconnect implementation uses 5-second heartbeat/retry timers, enters `Unreachable` after two missed heartbeats, mints a fresh session ID on each retry, and relies on the server's 30-second timeout plus strict `SessionOrder` supersession.
+- The real Task 22 preflight found Wi-Fi `Up` but no canonical installed client, no client process, no client command on `PATH`, and no local UDP 6902 endpoint. A build-only `target\\debug\\wifimic_client.exe` existed but was not launched as a substitute.
+- The remote service/listener was active at PID 33601, but its deployed ELF matched the stale deployment already identified by Todo 19, whose real Start/Ack attempt timed out with Windows error 10060. No interruption, installation, firewall mutation, rebuild, or service restart was attempted.
+
+## 2026-08-22 Todo 24
+
+- The server heartbeat-timeout state machine was inspected before host activity: `HEARTBEAT_TIMEOUT`
+  is 30 seconds and the lifecycle includes `Idle`; Todo 6's injected-clock test is deterministic
+  evidence only and cannot replace the real two-host timing acceptance.
+- The 2026-08-22T21:29:04.4467076+08:00 Windows preflight found the canonical task, install root,
+  and both exact client process spellings absent. VB-CABLE Input and Output were present, but that
+  hardware fact did not provide a live client session.
+- The 2026-08-22T21:29:05,152186091+08:00 Linux preflight found the service active as PID 33601
+  with UDP 6902 listening. No Start/Ack, heartbeat, Idle, capture-stop, or fresh-session timestamp
+  was invented after the Windows artifact gate failed.

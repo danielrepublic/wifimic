@@ -46,3 +46,27 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 ## 2026-08-22
 
 - Task 17 had a real ordering defect: `ResolveRevision` ran before `FetchTags`, so a valid remote-only tag could not be resolved. The updater now keeps dirty-checkout rejection first, fetches within the bounded native operation, then resolves exactly one commit; no live update was attempted.
+2026-08-22 Todo 20: Live Start/Ack and `wifimic_client --calibrate` both timed out with Windows error 10060. SSH, the active remote service, `parec`, pinned PipeWire source, peer IP, VB-CABLE endpoint, and UFW scope were present; the remote ELF remains stale relative to the current control loop. Five-minute normal and 60-second saturated runs were not started.
+2026-08-22 Todo 20 follow-up: Focused tests now prove stale calibration sequence rejection. The corrected implementation preserves the 494-byte Todo 3 audio contract; the required per-frame cross-host capture timestamp is intentionally unresolved rather than transported through the product wire format.
+
+## 2026-08-22 Todo 21
+
+- Live tray Exit/Restart acceptance is blocked before mutation: the exact canonical Scheduled Task `\wifimic\wifimic-client`, `C:\Program Files\wifimic-client`, and both exact client process identities were absent in the timestamped PowerShell preflight. The active Linux service/listener was present, but no real two-host session could be started.
+- No task registration, executable install, firewall change, logout, tray interaction, or remote rebuild/restart was attempted. Task 21 remains unchecked; see `.omo/evidence/task-21-wifimic-lan-audio.log` and its paired failure log.
+
+## 2026-08-22 Todo 22
+
+- Automatic reconnect acceptance is blocked before mutation: `\\wifimic\\wifimic-client`, `C:\\Program Files\\wifimic-client`, both exact client process spellings, and both `Get-Command` lookups were absent. The only client executable found was the uninstalled build artifact `target\\debug\\wifimic_client.exe`.
+- The active remote listener remains the stale ELF from Todo 19; the prior real Start/Ack attempt timed out with Windows error 10060. No live session existed, so the exact 15-second interruption and 20-second resume assertion were not attempted.
+- Wi-Fi was verified `Up`, local UDP 6902 had no endpoint, and no temporary adapter/firewall mutation was performed or left behind. See both Task 22 evidence files.
+
+## 2026-08-22 Todo 24
+
+- The real 30-second heartbeat-timeout acceptance is blocked at read-only preflight: the canonical
+  `\\wifimic\\wifimic-client` task, `C:\\Program Files\\wifimic-client` install, and both exact
+  `wifimic_client.exe` process identities were absent at
+  `2026-08-22T21:29:04.4467076+08:00`.
+- The remote service/listener was active at `2026-08-22T21:29:05,152186091+08:00`, but no live
+  stream existed to terminate. Consequently the required last-heartbeat-to-Idle elapsed time,
+  capture stop, fresh-session recovery, and server survival during the scenario are all unobserved
+  and remain FAIL rather than simulated.
