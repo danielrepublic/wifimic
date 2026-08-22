@@ -1,0 +1,28 @@
+# Todo 13 — Windows tray Restart/Exit wiring
+
+Contract under test: Todo 13 requires the `wifimic-client` tray to keep the hidden-by-default Windows client behavior, create the embedded tray resource and menu, pump Win32 messages on the tray-creation thread, call `ControlPlane::restart()` directly for Restart without an implicit Stop, and call `ControlPlane::stop()` before terminating only the current process run for Exit. The Scheduled Task remains responsible for the next logon.
+
+## Implementation
+
+- Added `apps/wifimic_client/src/tray.rs` with canonical tooltip `wifimic-client`, `Restart`/`Exit` IDs, typed tray errors, same-thread `TrayRuntime`, native `MenuEvent::receiver()` mapping, and the non-blocking Win32 message pump.
+- Added the injected `TrayControl`/`MenuEvent` seam and `tray_tests.rs`; Restart forwards exactly once and returns the fresh ID supplied by the control seam. Exit calls Stop, then marks shutdown, and `render_if_running` suppresses all later rendering.
+- Added Windows-only `tray-icon`, `windows`, and `embed-resource` wiring; `assets/tray-icon.rc` uses canonical resource ordinal `1 ICON "tray-icon.ico"` and the copied icon has ICO signature `00000100`, 115474 bytes.
+- Added the Windows subsystem attribute so no console window is introduced for the background tray client.
+
+## Verification
+
+1. `cargo test -p wifimic_client --bin wifimic_client tray` — PASS, 4 passed, 0 failed.
+2. `cargo test -p wifimic_client --bin wifimic_client` — PASS, 38 passed, 2 ignored, 0 failed.
+3. `cargo fmt --all -- --check` — PASS; rustfmt emitted the existing `use_small_diffs` unknown-option warning only.
+4. `cargo test --workspace --all-targets` — PASS: client lib 30 passed/2 ignored, client bin 38 passed/2 ignored, diagnostics 5 passed, protocol 11 passed, server 18 passed/1 ignored, LAN acceptance 0 passed/1 ignored; 0 failed.
+5. `cargo build --workspace` — PASS.
+6. `cargo clippy --workspace --all-targets --all-features -- -D warnings` — PASS.
+7. `rustc -vV` — Rust 1.97.1, host `x86_64-pc-windows-gnu`; the Cargo gates above therefore compiled the Windows target on this host.
+8. Bounded smoke command launched `target\\debug\\wifimic_client.exe` for 2 seconds: `SMOKE STARTED: pid=22340 exited=False`; cleanup terminated it; `SMOKE RECEIPT: remaining_wifimic_client_processes=0`.
+9. Native tray visual review route: browser/page QA is N/A; the deterministic injected menu seam is the acceptance surface. The multimodal icon inspection tool returned no response, so only the independently observed ICO signature/resource size is recorded.
+
+## Scope honesty and cleanup receipt
+
+- No real tray click, Scheduled Task state, live Ack, VB-CABLE delivery, or LAN audio/network claim is made. Those behaviors are deferred to later Wave 5/deployment acceptance tasks.
+- Restart does not call Stop; Exit is the only path that stops and exits this process run. No service, tray IPC, extra menu capability, fallback endpoint, or workspace crate was added.
+- The bounded smoke left zero `wifimic_client` processes. No repo-local temporary files or interactive tray process remain. Pre-existing unrelated `.omo/boulder.json`, `.omo/plans/**`, and `.omo/run-continuation/**` changes were not staged.

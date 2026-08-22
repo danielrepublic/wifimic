@@ -1,7 +1,11 @@
+#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
+
 pub mod control;
 pub mod jitter;
 pub mod logging;
 pub mod render;
+
+mod tray;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (_diagnostics, _startup_rotation) = logging::initialize_diagnostics()?;
@@ -16,7 +20,9 @@ fn run_windows_client() -> Result<(), Box<dyn std::error::Error>> {
 
     use control::{ControlPlane, InboundOutcome, UdpClientSocket};
     use render::{RenderConfig, Renderer};
+    use tray::{ClientRunState, TrayDispatch};
 
+    let tray = tray::TrayRuntime::new()?;
     let origin = Instant::now();
     let socket = UdpClientSocket::bind()?;
     socket.set_read_timeout(Some(Duration::from_millis(1)))?;
@@ -28,9 +34,18 @@ fn run_windows_client() -> Result<(), Box<dyn std::error::Error>> {
             .map(|duration| u64::try_from(duration.as_millis()).unwrap_or(u64::MAX))
     };
     control.start(origin, epoch_ms()?)?;
+    let mut run_state = ClientRunState::Running;
 
     loop {
         let now = Instant::now();
+        tray::pump_windows_messages();
+        if let Some(event) = tray.poll_menu_event() {
+            let dispatch =
+                tray::dispatch_menu_event(&mut control, event, now, epoch_ms()?, &mut run_state)?;
+            if dispatch == TrayDispatch::ExitRequested {
+                break;
+            }
+        }
         match control.receive_once(now) {
             Ok(Some(InboundOutcome::DroppedUnapprovedSource))
             | Ok(Some(InboundOutcome::IgnoredAck { .. }))
@@ -49,6 +64,8 @@ fn run_windows_client() -> Result<(), Box<dyn std::error::Error>> {
             Err(error) => return Err(error.into()),
         }
         control.advance(now, epoch_ms()?)?;
-        let _ = control.render_ready(now)?;
+        let _ = tray::render_if_running(&mut control, now, run_state)?;
     }
+
+    Ok(())
 }

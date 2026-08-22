@@ -20,6 +20,10 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 
 ## 2026-08-22
 
+- Rust LSP diagnostics timed out on the changed client files, matching the inherited workspace limitation; Cargo formatting, tests, build, and Clippy remain the authoritative checks for Todo 13.
+
+## 2026-08-22
+
 - Task 16 was verified with a faithful isolated fake-command harness rather than `arch-daniel`: the Windows checkout is intentionally dirty from orchestration files, and the real service/control smoke requires an approved source at peer `192.168.0.200`; no live update or end-to-end capture claim is made here.
 
 ## 2026-08-22

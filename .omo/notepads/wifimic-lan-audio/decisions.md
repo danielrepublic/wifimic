@@ -38,3 +38,8 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 
 - Client reachability is a typed transition: Start Ack establishes the pending ID, matching Heartbeat Acks reset the missed counter, and two missed Heartbeat Acks enter Unreachable. A retry always mints a new ID with the shared monotonic generator; no rejected or unacknowledged ID is reused.
 - The client trusts exactly IPv4 `192.168.0.210` for inbound Ack and audio datagrams, while accepting any source port from that IP. Filtering occurs before protocol state or jitter/render mutation.
+
+## 2026-08-22
+
+- Todo 13 uses the canonical resource ordinal `1`, labels `Restart`/`Exit`, and tooltip `wifimic-client`; no extra tray capabilities or service/IPC layer is introduced.
+- Restart dispatches directly to `ControlPlane::restart(now, epoch_ms)` and never calls Stop first. Exit calls `ControlPlane::stop(now)` before marking the current process run for shutdown, including when Stop returns a typed error; the Scheduled Task remains outside this process's lifecycle.

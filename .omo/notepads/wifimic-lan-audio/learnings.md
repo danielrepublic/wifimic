@@ -100,6 +100,11 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 
 ## 2026-08-22
 
+- Todo 13 keeps `TrayRuntime`, native `MenuEvent::receiver()`, and the non-blocking Win32 message pump on the same client loop thread that creates the tray icon; the hidden Windows subsystem avoids a console window while the tray remains available.
+- The injected seam covers Restart, Exit, unknown IDs, duplicate Exit, Stop errors, and post-Exit render suppression without claiming a real tray click or live network/audio behavior.
+
+## 2026-08-22
+
 - Task 16's updater keeps the source checkout read-only: it accepts exactly one tag or hexadecimal commit, rejects dirty status before fetching/building, stages with `git worktree add --detach`, and bounds fetch, build, systemd, and smoke operations with `timeout`.
 - The transaction copies the prior binary, user unit, hashes, and `file` metadata into a private transaction directory before stopping the user service; the candidate is installed with same-directory copy-plus-`mv`, and the EXIT trap restores the binary/unit and proves `systemctl --user is-active` after rollback.
 - A complete smoke is stronger than a successful send: the built-in UDP probe checks exact Start, Heartbeat, and Stop Acks, while an injected helper must emit `wifimic-control-smoke: PASS`; the local harness covered good update, deliberate bad-tag health rollback, build failure, invalid tag, prior hash, active service, and staging cleanup.

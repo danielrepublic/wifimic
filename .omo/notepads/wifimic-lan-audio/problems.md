@@ -12,6 +12,10 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 
 ## 2026-08-22
 
+- No unresolved Todo 13 implementation blocker remains. Real tray clicks, Scheduled Task state, VB-CABLE/network delivery, and live Ack behavior are intentionally deferred to later Wave 5/deployment acceptance; this task claims only the injected menu seam and bounded startup smoke.
+
+## 2026-08-22
+
 - No live `arch-daniel` updater run was attempted: its required peer-originated control smoke cannot be honestly substituted by a localhost datagram because the production server accepts only `192.168.0.200`.
 
 ## 2026-08-22

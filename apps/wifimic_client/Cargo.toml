@@ -13,7 +13,12 @@ wifimic_diagnostics = { path = "../../crates/wifimic_diagnostics" }
 wifimic_protocol = { path = "../../crates/wifimic_protocol" }
 
 [target.'cfg(windows)'.dependencies]
+tray-icon = "0.24"
 wasapi = "0.23"
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+
+[build-dependencies]
+embed-resource = "3.0"
 
 [lints]
 workspace = true
