@@ -1,0 +1,12 @@
+/target/
+artifacts/qa/
+.DS_Store
+
+# Local CodeGraph index (auto-generated, never committed)
+/.codegraph/
+
+# Prevent recurrence of ad-hoc root debug-script artifacts
+/*.png
+/task_*.txt
+/cleanup-log.txt
+/uninstall-std*.txt
