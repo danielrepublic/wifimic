@@ -16,3 +16,7 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 
 - Treat active `ufw.service` as the selected packet-filtering manager on `arch-daniel`; keep iptables/nftables services inactive and refuse any mixed-backend state. The final UDP 6902 rule remains exactly peer `192.168.0.200` allow plus anywhere deny.
 - A real server binary may be staged from the pushed repository snapshot when the host toolchain can build it; use a temporary credential-free source archive, verify the resulting ELF and active user service, then remove all staging artifacts.
+
+## 2026-08-22
+
+- The production loop gives the UDP socket a bounded 100 ms read timeout so `ControlPlane::advance` can enforce liveness and retry timers without a separate timer thread; the control module itself owns only the named 30-second and 5-second intervals.

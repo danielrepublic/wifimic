@@ -72,6 +72,13 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 - Refactor measurements are 17 pure LOC for `jitter.rs`, 168 for `jitter/buffer.rs`, 86 for `jitter/types.rs`, 108 for `jitter/adaptation.rs`, and 231 for the unchanged property/scenario tests.
 - The previously reported two logging rotation failures did not reproduce during the post-refactor workspace test; no logging code was changed and no issue entry is required.
 
+## 2026-08-22
+
+- The server control plane uses `wifimic_protocol::SessionOrder` as its sole Start high-water primitive; Stop leaves that mark intact, while Streaming supersession swaps the active ID without calling `CaptureHandle::start` again.
+- `ControlPlane::handle_datagram` is the tested wire seam: accepted Start/Heartbeat/Stop messages return encoded protocol Acks, while stale, mismatched, and inactive commands return no Ack and emit typed rejection events.
+- Deterministic `Instant` inputs and a fake `CaptureController` cover the seven Todo 6 acceptance cases without sleeps; the test AckSink decodes the real control wire response in memory.
+- The initial control implementation exceeded the 250 pure-LOC ceiling; moving capture/error helpers to `control_support.rs` and test fixtures to `control_test_support.rs` kept every touched Rust source file below the limit while preserving the public control facade.
+
 ## 2026-08-22T09:07:49Z
 
 - Task 9 guide writing: every command in `docs/deployment-linux.md` was cross-checked against the real artifacts — unit `ExecStart=%h/.local/bin/wifimic_server`, firewall selector branches, pinned source from `capture_types.rs`, peer/port from `network.rs` — so no doc-only values were invented.
