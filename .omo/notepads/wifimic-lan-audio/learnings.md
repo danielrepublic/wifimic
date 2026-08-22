@@ -24,6 +24,12 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 - Injected `Instant` values make the rate limiter boundary, reset, and 1000-event heartbeat-timeout burst deterministic; the configured one-second gate admits exactly one event from the 0–999 ms burst.
 - Rust LSP timed out as expected from prior workspace guidance; package tests, Clippy with `-D warnings`, workspace build, and crate documentation all passed.
 
+## 2026-08-22T09:00:00Z
+
+- The server capture adapter is safest as a small public `CaptureHandle` facade over a private process launcher and injected reader/clock seams: `start` remains the only spawn boundary, `read_frame` fills exactly `PCM_PAYLOAD_BYTES`, and `stop` is idempotent.
+- Codegraph indexed the protocol crate but not the server capture symbols, so the required server and micdriver references were inspected directly; this limitation is recorded in task-5 evidence.
+- The live SSH smoke was unavailable because `arch-daniel` landed in `/home/daniel` with no wifimic checkout; no real capture child was started. Server-only build, tests, Clippy, and formatting passed.
+
 ## 2026-08-22T16:09:53.1634831+08:00
 
 - CodeGraph had no indexed `wifimic_server`/`micdriver_client` network symbols for this checkout, so `apps/wifimic_server/src/network.rs` was created from the task contract; the reference was inspected directly at `C:\Users\Daniel\Documents\opencode\micdriver\apps\micdriver_client\src\network.rs` because the requested `apps/micdriver_client` path does not exist in wifimic.
@@ -35,3 +41,9 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 - Live preflight on `arch-daniel` found `ufw.service` active while both `iptables.service` and `nftables.service` were inactive; `ufw` owns the existing iptables-nft ruleset. The deployment selector used UFW's persistent, peer-scoped allow plus explicit port-scoped deny and deliberately did not enable nftables.service beside the active firewall manager.
 - UDP 6902 from `192.168.0.200` incremented the UFW accept counter once; the scoped drop counter remained zero because no third reachable LAN source was available. The third-source limitation is recorded in task-8 failure evidence.
 - The user unit parses with the reference hardening intact, but `~/.local/bin/wifimic_server` is not installed yet, so the remote start probe ended in `203/EXEC`; no fake executable was staged to manufacture an active-service result.
+
+## 2026-08-22T08:20:00Z
+
+- The client renderer can be tested independently of the incomplete binary entrypoint by exposing `render` from `apps/wifimic_client/src/lib.rs`; the Windows-targeted library suite passed 9 deterministic tests, with the two hardware tests remaining explicitly ignored by default.
+- On this Windows host, live WASAPI endpoint enumeration found `CABLE Input (VB-Audio Virtual Cable)`, and the live renderer accepted and stopped after writing 400 synthetic 1 kHz frames to that exact endpoint.
+- The available live test verifies endpoint opening and frame writes, but does not capture `CABLE Output`; no loopback capture tool is installed (`ffmpeg not found`), so the acoustic/payload confirmation remains unverified. Rust LSP timed out again after the focused Cargo checks passed.
