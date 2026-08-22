@@ -22,3 +22,14 @@ Workspace-wide test note:
   cargo test --workspace reached all jitter tests successfully but exited 101 because
   two unrelated pre-existing logging tests failed in apps/wifimic_client/src/logging.rs
   (expected removals 2/1, observed 3/2). No logging code was changed for Task 11.
+
+Refactor verification:
+  - extracted public types, queue/playout state, and adaptive helpers into cohesive modules;
+  - cargo test -p wifimic_client jitter: PASS, 13 passed;
+  - cargo test --workspace: PASS, 26 client tests passed, 2 ignored, plus all workspace tests;
+  - cargo build --workspace: PASS;
+  - cargo clippy --workspace --all-targets -- -D warnings: PASS;
+  - rustfmt --edition 2021 --check on all jitter Rust files: PASS;
+  - cargo fmt --all -- --check: PASS;
+  - every touched jitter Rust file measured at or below 250 pure LOC.
+  The previously reported logging failures did not reproduce on the recheck.
