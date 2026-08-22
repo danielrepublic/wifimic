@@ -5,7 +5,9 @@ pub mod jitter;
 pub mod logging;
 pub mod render;
 
+mod latency_diagnostic;
 mod tray;
+use latency_diagnostic::run_latency_diagnostic;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, thiserror::Error)]
@@ -30,6 +32,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         run_calibration()?;
         return Ok(());
     }
+    if std::env::args().any(|argument| argument == "--diagnose-latency") {
+        run_latency_diagnostic()?;
+        return Ok(());
+    }
     #[cfg(target_os = "windows")]
     run_windows_client()?;
     Ok(())
@@ -43,13 +49,20 @@ const RECEIVE_POLL_INTERVAL: Duration = Duration::from_millis(1);
 fn run_calibration() -> Result<(), CalibrationCliError> {
     use std::net::{Ipv4Addr, SocketAddr};
 
+    let mut socket =
+        control::UdpClientSocket::bind_at(SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0)))?;
+    socket.set_read_timeout(Some(CALIBRATION_READ_TIMEOUT))?;
+    calibrate_socket(&mut socket)?;
+    Ok(())
+}
+
+pub(crate) fn calibrate_socket(
+    socket: &mut control::UdpClientSocket,
+) -> Result<wifimic_protocol::latency::CalibrationTracker, CalibrationCliError> {
     use control::DatagramTransport;
     use wifimic_protocol::latency::{CalibrationTracker, NtpSample};
     use wifimic_protocol::{decode_calibration, encode_calibration, CalibrationPacket};
 
-    let mut socket =
-        control::UdpClientSocket::bind_at(SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0)))?;
-    socket.set_read_timeout(Some(CALIBRATION_READ_TIMEOUT))?;
     let mut tracker = CalibrationTracker::new();
     for sequence in 0..CALIBRATION_PROBE_COUNT {
         let t1_client_send_us = unix_micros();
@@ -85,7 +98,7 @@ fn run_calibration() -> Result<(), CalibrationCliError> {
             result.round_trip_us, update.offset_us, update.error_bound_us, update.instability_warning
         );
     }
-    Ok(())
+    Ok(tracker)
 }
 
 fn unix_micros() -> u64 {
