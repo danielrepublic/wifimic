@@ -1,0 +1,28 @@
+Todo 20 live failure evidence
+
+Command:
+`cargo test -p wifimic_server --test lan_audio_acceptance -- --ignored --nocapture`
+
+Observed result:
+- Local peer address `192.168.0.200` was present.
+- Remote `wifimic-server` user service reported `active` over SSH.
+- UFW reported the expected peer allow and default drop rules.
+- `firewall_counters_before`: peer allow `packets 7 bytes 258`; scoped drop `packets 0 bytes 0`.
+- The approved-peer Start request failed waiting for the Ack: Windows error 10060 (`TimedOut`, Chinese system message: `連線嘗試失敗，因為連線對象有一段時間並未正確回應，或是連線建立失敗，因為連線的主機無法回應。`).
+- Test result: 1 failed, 0 passed, 0 ignored; elapsed 6.56 s.
+
+Command:
+`cargo run -p wifimic_client -- --calibrate`
+
+Observed result:
+- Build succeeded.
+- Calibration probe timed out with the same Windows error 10060; no calibration reply or audio statistic was observed.
+
+Blocker:
+- The remote Linux service is reachable by SSH and active but did not answer the current control/calibration UDP path. Existing Task 19 evidence identifies the installed remote ELF as stale relative to the control loop. Refreshing/restarting that service was not performed because the required run forbids unapproved service mutation.
+- No live audio latency claim, normal-network P95 acceptance, or saturated-Wi-Fi result can be made.
+
+Final closeout:
+- The fixed 494-byte wire contract correction and stale calibration-sequence rejection are locally verified; they do not remove the live prerequisite failures.
+- The exact remaining prerequisites are an elevated interactive Windows run accepting `-AcceptHostMutation`, a refreshed/restarted current server deployment on `arch-daniel`, and an approved VB-CABLE loopback capture/detection tool.
+- Until those prerequisites exist, the five-minute normal run, 60-second saturated run, and all raw/conservative P50/P95/P99 values remain unexecuted and unclaimed.

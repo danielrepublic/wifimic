@@ -1,0 +1,53 @@
+Todo 20 evidence: timestamp calibration and application-level audio latency
+
+Implementation verification (local, not live acceptance):
+- `cargo test -p wifimic_protocol`: PASS, 12 wire-contract tests and 6 latency/calibration tests.
+- `cargo test -p wifimic_server -p wifimic_client`: PASS, client 31+39 tests, server 18 tests; 3 live/hardware tests remained ignored.
+- Calibration constants implemented: maximum accepted round trip 20,000 us; recalibration interval 30 s; instability threshold 5,000 us; conservative P95 margin 25,000 us.
+- NTP-style sample uses t1 client send, t2 server receive, t3 server send, and t4 client receive. Offset is `t2 - (t1 + (t4 - t1)/2)` and error bound is half the accepted round trip.
+- The Todo 3 audio wire contract remains unchanged: tag/version/session/sequence/PCM, 494 bytes. No per-frame capture timestamp is transported; the current protocol therefore cannot produce the required cross-host raw latency statistics without a separately approved measurement channel.
+- `wifimic_client --calibrate` and the server `--calibrate` responder path were compiled and exercised; the client failed at the external peer timeout because the remote service did not answer.
+
+Read-only live preflight:
+- Windows local IPv4 `192.168.0.200`: present and Preferred/Active.
+- Windows endpoint `CABLE Input (VB-Audio Virtual Cable)`: present, Status OK.
+- SSH to `arch-daniel`: reached `192.168.0.210`; user service `wifimic-server`: active; `/usr/bin/parec`: present; pinned source `alsa_input.pci-0000_00_1b.0.analog-stereo`: present.
+- Linux firewall: UFW active; nftables and iptables inactive. `6902/udp ALLOW IN 192.168.0.200` and default `6902/udp DENY IN Anywhere`; scoped drop counter was `0` before the run.
+
+Live acceptance status:
+- Five-minute normal-network audio run: NOT EXECUTED; application Start/Ack preflight is blocked.
+- At least 60-second saturated-Wi-Fi characterization: NOT EXECUTED; the normal prerequisite is blocked.
+- Raw P50/P95/P99 and conservative P95: no live values exist; no PASS is claimed.
+- Required real pinned `parec`/PipeWire and Windows VB-CABLE loopback measurement: unavailable until the remote service is refreshed and an external VB-CABLE capture/loopback tool is available.
+
+Result: Todo 20 cannot truthfully be checked.
+
+Correction after parent review:
+- Removed the unplanned 8-byte timestamp field and restored `AUDIO_HEADER_BYTES`, `AUDIO_PACKET_BYTES`, and the original encoding layout.
+- Removed the misleading pre-read capture timestamp claim. `CaptureHandle::read_frame` retains the existing acquisition metadata only; it is not used as a claimed cross-host latency timestamp.
+- Calibration replies now require the currently outstanding probe sequence; stale and out-of-order replies are rejected.
+LSP verification:
+- `lsp_diagnostics` was requested for every changed Rust file. The Rust LSP daemon timed out (first request after 30 s; remaining requests returned MCP timeout). Cargo test/build/Clippy are the authoritative clean gates for this run.
+Final local gates after implementation:
+- `cargo fmt --all -- --check`: PASS (rustfmt emitted existing unknown `use_small_diffs` configuration warnings only).
+- `cargo test --workspace`: PASS (all non-ignored tests passed; live/hardware tests remained ignored).
+- `cargo build --workspace`: PASS.
+- `cargo clippy --workspace -- -D warnings`: PASS.
+Follow-up correction verification:
+- Fixed-wire protocol tests pass with `AUDIO_HEADER_BYTES = 14`, `AUDIO_PACKET_BYTES = 494`, and the original tag/version/session/sequence/PCM layout.
+- `control_rejects_stale_calibration_reply_sequence` passes; a reply whose sequence does not match the outstanding probe is rejected and cannot update the offset.
+- No live run was retried; the recorded Windows 10060 Start/Ack and calibration timeout remains the blocker.
+Final follow-up verification:
+- `git diff --check`: PASS.
+- `git diff --cached --name-only`: no staged files.
+- `cargo fmt --all -- --check`: PASS (existing `use_small_diffs` configuration warnings only).
+- `cargo test --workspace`: PASS; all non-ignored tests passed, including stale calibration sequence rejection and fixed-wire tests.
+- `cargo build --workspace`: PASS.
+- `cargo clippy --workspace -- -D warnings`: PASS.
+- `lsp_diagnostics` was requested for every changed Rust file; Rust-LSP timed out again, so Cargo gates remain authoritative.
+
+Final closeout:
+- The implementation now preserves Todo 3's exact 494-byte audio packet and rejects stale or mismatched calibration reply sequences.
+- The final local gates were rerun literally: `cargo fmt --all -- --check` PASS with only existing `use_small_diffs` warnings; `cargo test --workspace` PASS with all non-ignored tests passing; `cargo build --workspace` PASS; `cargo clippy --workspace -- -D warnings` PASS; `git diff --check` PASS.
+- Todo 20 remains blocked and unchecked. No live normal-network or saturated-Wi-Fi run was executed, and no raw or conservative latency statistic exists.
+- Unblock requires an elevated interactive Windows prerequisite run with `-AcceptHostMutation`, deployment/restart of a fresh server binary on `arch-daniel`, and an approved real VB-CABLE loopback capture/detection mechanism. Until then, no live acceptance claim is valid.

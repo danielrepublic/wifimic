@@ -6,12 +6,75 @@ pub mod logging;
 pub mod render;
 
 mod tray;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (_diagnostics, _startup_rotation) = logging::initialize_diagnostics()?;
+    if std::env::args().any(|argument| argument == "--calibrate") {
+        return run_calibration();
+    }
     #[cfg(target_os = "windows")]
     run_windows_client()?;
     Ok(())
+}
+
+const CALIBRATION_PROBE_COUNT: u32 = 4;
+const CALIBRATION_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
+
+fn run_calibration() -> Result<(), Box<dyn std::error::Error>> {
+    use std::net::{Ipv4Addr, SocketAddr};
+
+    use control::DatagramTransport;
+    use wifimic_protocol::latency::{CalibrationTracker, NtpSample};
+    use wifimic_protocol::{decode_calibration, encode_calibration, CalibrationPacket};
+
+    let mut socket =
+        control::UdpClientSocket::bind_at(SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0)))?;
+    socket.set_read_timeout(Some(CALIBRATION_READ_TIMEOUT))?;
+    let mut tracker = CalibrationTracker::new();
+    for sequence in 0..CALIBRATION_PROBE_COUNT {
+        let t1_client_send_us = unix_micros();
+        socket.send_to_peer(&encode_calibration(CalibrationPacket::Probe {
+            sequence,
+            t1_client_send_us,
+        }))?;
+        let Some(datagram) = socket.receive_once()? else {
+            return Err("calibration reply was filtered by the peer boundary".into());
+        };
+        let CalibrationPacket::Reply {
+            sequence: reply_sequence,
+            t1_client_send_us,
+            t2_server_receive_us,
+            t3_server_send_us,
+        } = decode_calibration(&datagram.payload)?
+        else {
+            return Err("calibration peer returned a probe instead of a reply".into());
+        };
+        if reply_sequence != sequence {
+            return Err("calibration reply sequence did not match the probe".into());
+        }
+        let result = NtpSample::new(
+            t1_client_send_us,
+            t2_server_receive_us,
+            t3_server_send_us,
+            unix_micros(),
+        )
+        .calibrate()?;
+        let update = tracker.update(result);
+        println!(
+            "calibration sequence={sequence} round_trip_us={} offset_us={} error_bound_us={} instability_warning={}",
+            result.round_trip_us, update.offset_us, update.error_bound_us, update.instability_warning
+        );
+    }
+    Ok(())
+}
+
+fn unix_micros() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| {
+            u64::try_from(duration.as_micros()).unwrap_or(u64::MAX)
+        })
 }
 
 #[cfg(target_os = "windows")]
@@ -54,6 +117,8 @@ fn run_windows_client() -> Result<(), Box<dyn std::error::Error>> {
             | Ok(Some(InboundOutcome::StartAck { .. }))
             | Ok(Some(InboundOutcome::HeartbeatAck { .. }))
             | Ok(Some(InboundOutcome::AudioQueued { .. }))
+            | Ok(Some(InboundOutcome::Calibrated { .. }))
+            | Ok(Some(InboundOutcome::CalibrationRejected))
             | Ok(None) => {}
             Err(control::ControlError::Transport(error))
                 if matches!(

@@ -18,6 +18,7 @@ impl EventSink for WifimicLogSink {
             | Event::CaptureRetry { .. }
             | Event::HeartbeatTimeout { .. }
             | Event::ControlMessageRejected { .. } => Level::Warn,
+            Event::ClockInstabilityWarning { .. } => Level::Warn,
             Event::RenderEventTimeout { .. } | Event::JitterBufferLockPoisoned { .. } => {
                 Level::Error
             }

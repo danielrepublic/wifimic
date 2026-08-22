@@ -32,11 +32,16 @@
 
 mod audio;
 mod control;
+pub mod latency;
 mod sequence;
 mod session;
 
 pub use audio::{decode_audio_frame, encode_audio_frame, AudioFrame};
 pub use control::{decode_control, encode_control, ControlMessage};
+pub use latency::{
+    decode_calibration, encode_calibration, CalibrationPacket, CALIBRATION_PROBE_TAG,
+    CALIBRATION_REPLY_TAG,
+};
 pub use sequence::{classify_sequence, SequenceClassification};
 pub use session::{
     accepts_session_id, is_newer_session, next_session_id, SessionIdError, SessionIdGenerator,

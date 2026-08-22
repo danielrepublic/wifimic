@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use wifimic_diagnostics::{ConnectionState, Event};
+use wifimic_protocol::latency::{decode_calibration, CalibrationError, NtpSample};
 use wifimic_protocol::{
     decode_audio_frame, decode_control, encode_control, ControlMessage, HEARTBEAT_TAG, START_TAG,
 };
@@ -77,6 +78,46 @@ where
         })
     }
 
+    pub(super) fn receive_calibration(
+        &mut self,
+        packet: &[u8],
+        now: Instant,
+    ) -> Result<InboundOutcome, ControlError> {
+        let Ok(wifimic_protocol::CalibrationPacket::Reply {
+            sequence,
+            t1_client_send_us,
+            t2_server_receive_us,
+            t3_server_send_us,
+        }) = decode_calibration(packet)
+        else {
+            return Ok(InboundOutcome::CalibrationRejected);
+        };
+        if self.outstanding_calibration_sequence != Some(sequence) {
+            return Ok(InboundOutcome::CalibrationRejected);
+        }
+        self.outstanding_calibration_sequence = None;
+        let sample = NtpSample::new(
+            t1_client_send_us,
+            t2_server_receive_us,
+            t3_server_send_us,
+            super::unix_micros(),
+        );
+        let result = match sample.calibrate() {
+            Ok(result) => result,
+            Err(
+                CalibrationError::RoundTripTooLong { .. } | CalibrationError::InvalidTimestampOrder,
+            ) => {
+                return Ok(InboundOutcome::CalibrationRejected);
+            }
+        };
+        let update = self.apply_calibration(result, now);
+        Ok(InboundOutcome::Calibrated {
+            offset_us: update.offset_us,
+            error_bound_us: update.error_bound_us,
+            instability_warning: update.instability_warning,
+        })
+    }
+
     pub(super) fn advance_streaming(&mut self, now: Instant) -> Result<(), ControlError> {
         if !self.next_heartbeat.is_some_and(|next| now >= next) {
             return Ok(());
@@ -100,9 +141,11 @@ where
         self.accepted_session_id = Some(session_id);
         self.start_deadline = None;
         self.next_retry = None;
+        self.outstanding_calibration_sequence = None;
         self.next_heartbeat = Some(now + HEARTBEAT_INTERVAL);
         self.missed_heartbeats = 0;
         self.jitter.clear();
+        self.next_calibration_at = Some(now + super::RECALIBRATION_INTERVAL);
         self.state = ClientState::Streaming;
         self.transition_count = self.transition_count.saturating_add(1);
         self.diagnostics
@@ -145,6 +188,8 @@ where
         self.start_deadline = None;
         self.next_heartbeat = None;
         self.next_retry = None;
+        self.next_calibration_at = None;
+        self.outstanding_calibration_sequence = None;
         self.missed_heartbeats = 0;
         self.jitter.clear();
     }

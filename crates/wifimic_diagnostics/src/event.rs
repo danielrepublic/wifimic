@@ -23,6 +23,7 @@ pub enum EventType {
     SessionStarted,
     SessionStopped,
     ControlMessageRejected,
+    ClockInstabilityWarning,
 }
 
 impl Display for EventType {
@@ -43,6 +44,7 @@ impl Display for EventType {
             Self::SessionStarted => "session_started",
             Self::SessionStopped => "session_stopped",
             Self::ControlMessageRejected => "control_message_rejected",
+            Self::ClockInstabilityWarning => "clock_instability_warning",
         };
         formatter.write_str(name)
     }
@@ -113,6 +115,10 @@ pub enum Event {
         kind: ControlMessageKind,
         reason: ControlRejectionReason,
     },
+    ClockInstabilityWarning {
+        previous_offset_us: i64,
+        new_offset_us: i64,
+    },
 }
 
 impl Event {
@@ -135,6 +141,7 @@ impl Event {
             Self::SessionStarted { .. } => EventType::SessionStarted,
             Self::SessionStopped { .. } => EventType::SessionStopped,
             Self::ControlMessageRejected { .. } => EventType::ControlMessageRejected,
+            Self::ClockInstabilityWarning { .. } => EventType::ClockInstabilityWarning,
         }
     }
 
@@ -228,6 +235,13 @@ impl Display for Event {
             Self::ControlMessageRejected { kind, reason } => {
                 write!(formatter, "kind={kind} reason={reason}")
             }
+            Self::ClockInstabilityWarning {
+                previous_offset_us,
+                new_offset_us,
+            } => write!(
+                formatter,
+                "previous_offset_us={previous_offset_us} new_offset_us={new_offset_us}"
+            ),
         }
     }
 }

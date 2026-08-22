@@ -4,8 +4,12 @@ use std::time::{Duration, Instant};
 
 use thiserror::Error;
 use wifimic_diagnostics::{Event, EventContext, SessionStopReason};
+use wifimic_protocol::latency::{
+    CalibrationResult, CalibrationTracker, CalibrationUpdate, RECALIBRATION_INTERVAL,
+};
 use wifimic_protocol::{
-    AudioFrame, ControlMessage, SessionIdError, SessionIdGenerator, AUDIO_TAG, PCM_PAYLOAD_BYTES,
+    encode_calibration, AudioFrame, CalibrationPacket, ControlMessage, SessionIdError,
+    SessionIdGenerator, AUDIO_TAG, CALIBRATION_REPLY_TAG, PCM_PAYLOAD_BYTES,
 };
 
 use crate::jitter::{FrameInsertOutcome, JitterBuffer};
@@ -59,6 +63,14 @@ pub enum InboundOutcome {
     IgnoredAudio { session_id: u64 },
     /// A non-Ack control message from the peer was ignored.
     IgnoredControl,
+    /// A calibration reply updated the active client clock offset.
+    Calibrated {
+        offset_us: i64,
+        error_bound_us: u64,
+        instability_warning: bool,
+    },
+    /// A calibration reply was rejected because its round trip was too long.
+    CalibrationRejected,
 }
 
 /// The result of one renderer-facing playout poll.
@@ -143,6 +155,10 @@ pub struct ControlPlane<T, R> {
     missed_heartbeats: u8,
     transition_count: u64,
     malformed_packets: u64,
+    calibration: CalibrationTracker,
+    next_calibration_at: Option<Instant>,
+    calibration_sequence: u32,
+    outstanding_calibration_sequence: Option<u32>,
 }
 
 impl<T, R> ControlPlane<T, R>
@@ -175,6 +191,10 @@ where
             missed_heartbeats: 0,
             transition_count: 0,
             malformed_packets: 0,
+            calibration: CalibrationTracker::new(),
+            next_calibration_at: None,
+            calibration_sequence: 0,
+            outstanding_calibration_sequence: None,
         }
     }
 
@@ -201,6 +221,7 @@ where
         self.start_deadline = None;
         self.next_heartbeat = None;
         self.next_retry = None;
+        self.outstanding_calibration_sequence = None;
         self.missed_heartbeats = 0;
         self.jitter.clear();
         if let Some(id) = session_id {
@@ -217,6 +238,7 @@ where
 
     /// Advances timers without treating local UDP send success as reachability.
     pub fn advance(&mut self, now: Instant, epoch_ms: u64) -> Result<(), ControlError> {
+        self.maybe_recalibrate(now)?;
         match self.state {
             ClientState::Stopped => Ok(()),
             ClientState::Establishing => {
@@ -250,6 +272,7 @@ where
         }
         match packet.first().copied() {
             Some(AUDIO_TAG) => self.receive_audio(packet, now),
+            Some(CALIBRATION_REPLY_TAG) => self.receive_calibration(packet, now),
             _ => self.receive_control(packet, now),
         }
     }
@@ -310,6 +333,57 @@ where
     pub const fn renderer(&self) -> &R {
         &self.renderer
     }
+
+    /// Applies one accepted NTP-style sample and emits instability diagnostics.
+    pub fn apply_calibration(
+        &mut self,
+        result: CalibrationResult,
+        now: Instant,
+    ) -> CalibrationUpdate {
+        let previous_offset_us = self.calibration.offset_us();
+        let update = self.calibration.update(result);
+        if update.instability_warning {
+            if let Some(previous_offset_us) = previous_offset_us {
+                self.diagnostics.emit(
+                    now,
+                    Event::ClockInstabilityWarning {
+                        previous_offset_us,
+                        new_offset_us: update.offset_us,
+                    },
+                );
+            }
+        }
+        update
+    }
+
+    fn maybe_recalibrate(&mut self, now: Instant) -> Result<(), ControlError> {
+        if self.state != ClientState::Streaming
+            || !self
+                .next_calibration_at
+                .is_some_and(|deadline| now >= deadline)
+        {
+            return Ok(());
+        }
+        let packet = encode_calibration(CalibrationPacket::Probe {
+            sequence: self.calibration_sequence,
+            t1_client_send_us: unix_micros(),
+        });
+        self.transport
+            .send_to_peer(&packet)
+            .map_err(ControlError::Transport)?;
+        self.outstanding_calibration_sequence = Some(self.calibration_sequence);
+        self.calibration_sequence = self.calibration_sequence.wrapping_add(1);
+        self.next_calibration_at = Some(now + RECALIBRATION_INTERVAL);
+        Ok(())
+    }
+}
+
+fn unix_micros() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |duration| {
+            u64::try_from(duration.as_micros()).unwrap_or(u64::MAX)
+        })
 }
 
 #[path = "control_logic.rs"]

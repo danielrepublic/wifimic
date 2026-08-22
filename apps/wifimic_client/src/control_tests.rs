@@ -2,8 +2,11 @@ use std::io;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::{Duration, Instant};
 
+use wifimic_diagnostics::{Event, EventCollector, EventContext};
+use wifimic_protocol::latency::NtpSample;
 use wifimic_protocol::{
-    decode_control, encode_audio_frame, encode_control, AudioFrame, ControlMessage,
+    decode_calibration, decode_control, encode_audio_frame, encode_calibration, encode_control,
+    AudioFrame, CalibrationPacket, ControlMessage,
 };
 
 use super::{
@@ -273,4 +276,81 @@ fn control_malformed_ack_is_typed_and_does_not_change_state() {
     // Then
     assert!(matches!(result, Err(ControlError::Protocol(_))));
     assert_eq!(client.state(), ClientState::Establishing);
+}
+
+#[test]
+fn control_calibration_uses_new_offset_and_emits_instability_warning() {
+    let origin = Instant::now();
+    let collector = EventCollector::new();
+    let diagnostics = EventContext::new(origin, collector.clone());
+    let mut client = ControlPlane::with_config(
+        FakeTransport::default(),
+        FakeRenderer::default(),
+        super::ControlConfig::new(origin).with_diagnostics(diagnostics),
+    );
+    let first = NtpSample::new(1_000_000, 1_005_000, 1_006_000, 1_010_000)
+        .calibrate()
+        .expect("first calibration sample is valid");
+    let second = NtpSample::new(2_000_000, 2_015_000, 2_016_000, 2_010_000)
+        .calibrate()
+        .expect("second calibration sample is valid");
+
+    client.apply_calibration(first, origin);
+    let update = client.apply_calibration(second, origin + Duration::from_secs(1));
+
+    assert!(update.instability_warning);
+    assert!(collector.records().iter().any(|record| matches!(
+        record.event,
+        Event::ClockInstabilityWarning {
+            previous_offset_us: 0,
+            new_offset_us: 10_000,
+        }
+    )));
+}
+
+#[test]
+fn control_rejects_stale_calibration_reply_sequence() {
+    let origin = Instant::now();
+    let mut client = client(origin);
+    let session_id = client.start(origin, 80_000).expect("Start must send");
+    let _ = ack(&mut client, session_id, wifimic_protocol::START_TAG, origin);
+
+    client
+        .advance(origin + Duration::from_secs(30), 80_030)
+        .expect("scheduled calibration probe must send");
+    let probe = decode_calibration(
+        client
+            .transport()
+            .sent
+            .iter()
+            .rev()
+            .find(|packet| packet.first() == Some(&wifimic_protocol::CALIBRATION_PROBE_TAG))
+            .expect("calibration probe must be sent"),
+    )
+    .expect("calibration probe must decode");
+    let CalibrationPacket::Probe {
+        sequence,
+        t1_client_send_us,
+    } = probe
+    else {
+        panic!("expected a calibration probe");
+    };
+    let reply = |reply_sequence| {
+        encode_calibration(CalibrationPacket::Reply {
+            sequence: reply_sequence,
+            t1_client_send_us,
+            t2_server_receive_us: t1_client_send_us.saturating_add(1_000),
+            t3_server_send_us: t1_client_send_us.saturating_add(2_000),
+        })
+    };
+
+    let stale = client
+        .receive_datagram(SOURCE, &reply(sequence.wrapping_add(1)), origin)
+        .expect("stale calibration is a normal rejection");
+    let accepted = client
+        .receive_datagram(SOURCE, &reply(sequence), origin)
+        .expect("matching calibration must be accepted");
+
+    assert_eq!(stale, InboundOutcome::CalibrationRejected);
+    assert!(matches!(accepted, InboundOutcome::Calibrated { .. }));
 }

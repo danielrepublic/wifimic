@@ -48,6 +48,11 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 - The real lifecycle cannot be verified on this host because the canonical `\wifimic\wifimic-client` task and `C:\Program Files\wifimic-client` installation are absent, and no exact `wifimic_client.exe` process is running. The active remote listener alone is insufficient evidence for streaming, Idle timing, process exit, logon restart, or Restart session rotation.
 - The required corrective mutation would be unauthorized under this task and would require an explicit reversible cleanup plan. Do not install/register the Windows artifacts or rebuild/restart the remote ELF merely to manufacture a Task 21 pass.
 
+## 2026-08-22 Todo 23
+
+- Todo 23 remains unresolved because no live Windows client is installed or heartbeating. The active Linux listener and existing pinned source are insufficient to prove retries, zero fallback, or automatic resumption.
+- The pinned source was observed as `SUSPENDED` before any action and remained so afterward with the same mute, volume, default-source, and detailed PipeWire/ALSA configuration. Do not fault-inject or claim retry cadence until a real heartbeating peer is available.
+
 ## 2026-08-22 Todo 22
 
 - The real network-interruption scenario cannot start because there is no installed/running Windows client and the active server deployment is stale relative to the current control-plane loop. Do not install/register the client or rebuild/restart the remote ELF merely to manufacture a reconnect pass.
@@ -59,3 +64,9 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
   are absent and the active Linux ELF remains the stale deployment identified by Todo 19. Do not
   install/register the client, kill a substitute process, rebuild/restart the service, or claim a
   30–35 second transition from Todo 6's fake-clock tests.
+
+## 2026-08-22 Todo 20 final closeout
+
+- The local implementation and Cargo gates are clean after restoring the immutable 494-byte Todo 3 audio contract and adding stale calibration-reply rejection.
+- Live acceptance remains blocked: the approved peer still does not answer Start/calibration, the remote ELF must be refreshed and restarted through an authorized elevated workflow, and no approved VB-CABLE loopback capture/detection tool is available.
+- Do not claim normal/saturated Wi-Fi runs or raw/conservative latency percentiles until those exact prerequisites are completed.

@@ -47,7 +47,7 @@ fn audio_round_trip_uses_documented_big_endian_header() {
     // When: the frame is encoded and decoded.
     let wire = encode_audio_frame(&frame);
 
-    // Then: tag, version, session, and sequence use the documented field order and endianness.
+    // Then: tag, version, session, sequence, and capture timestamp use the documented field order.
     assert_eq!(wire.len(), AUDIO_PACKET_BYTES);
     assert_eq!(
         &wire[..AUDIO_HEADER_BYTES],

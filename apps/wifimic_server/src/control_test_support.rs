@@ -4,7 +4,7 @@ use std::time::Instant;
 use wifimic_diagnostics::{EventCollector, EventContext};
 use wifimic_protocol::{decode_control, encode_control, ControlMessage};
 
-use crate::capture::CaptureError;
+use crate::capture::{CaptureError, CapturedFrame};
 use crate::control::{CaptureController, ControlPlane};
 
 #[derive(Debug, Default)]
@@ -75,6 +75,13 @@ impl CaptureController for FakeCapture {
             .expect("fake capture state is not poisoned")
             .stops += 1;
         Ok(())
+    }
+
+    fn read_frame(&mut self) -> Result<CapturedFrame, CaptureError> {
+        Ok(CapturedFrame {
+            pcm: [0; wifimic_protocol::PCM_PAYLOAD_BYTES],
+            acquired_at: Instant::now(),
+        })
     }
 }
 

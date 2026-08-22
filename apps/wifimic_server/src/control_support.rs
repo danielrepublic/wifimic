@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use wifimic_diagnostics::ErrorClass;
 use wifimic_protocol::ProtocolError;
 
-use crate::capture::{CaptureError, CaptureHandle};
+use crate::capture::{CaptureError, CaptureHandle, CapturedFrame};
 
 /// The lifecycle of one client-controlled capture session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -18,6 +18,7 @@ pub enum ControlState {
 pub trait CaptureController {
     fn start(&mut self) -> Result<(), CaptureError>;
     fn stop(&mut self) -> Result<(), CaptureError>;
+    fn read_frame(&mut self) -> Result<CapturedFrame, CaptureError>;
 }
 
 impl CaptureController for CaptureHandle {
@@ -28,6 +29,10 @@ impl CaptureController for CaptureHandle {
     fn stop(&mut self) -> Result<(), CaptureError> {
         CaptureHandle::stop(self)
     }
+
+    fn read_frame(&mut self) -> Result<CapturedFrame, CaptureError> {
+        CaptureHandle::read_frame(self)
+    }
 }
 
 /// A typed failure at the control-plane boundary.
@@ -36,6 +41,7 @@ pub enum ControlError {
     Protocol(ProtocolError),
     UnexpectedAck { session_id: u64 },
     CaptureStop(CaptureError),
+    CaptureRead(CaptureError),
 }
 
 impl fmt::Display for ControlError {
@@ -49,6 +55,7 @@ impl fmt::Display for ControlError {
                 )
             }
             Self::CaptureStop(error) => write!(formatter, "capture stop failed: {error}"),
+            Self::CaptureRead(error) => write!(formatter, "capture read failed: {error}"),
         }
     }
 }
@@ -57,7 +64,7 @@ impl std::error::Error for ControlError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Protocol(error) => Some(error),
-            Self::CaptureStop(error) => Some(error),
+            Self::CaptureStop(error) | Self::CaptureRead(error) => Some(error),
             Self::UnexpectedAck { .. } => None,
         }
     }

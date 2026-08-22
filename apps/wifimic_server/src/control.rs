@@ -4,8 +4,8 @@ use wifimic_diagnostics::{
     ControlMessageKind, ControlRejectionReason, Event, EventContext, SessionStopReason,
 };
 use wifimic_protocol::{
-    decode_control, encode_control, ControlMessage, SessionOrder, HEARTBEAT_TAG, START_TAG,
-    STOP_TAG,
+    decode_control, encode_control, AudioFrame, ControlMessage, SessionOrder, HEARTBEAT_TAG,
+    START_TAG, STOP_TAG,
 };
 
 #[path = "control_support.rs"]
@@ -122,6 +122,21 @@ where
             self.try_start(now);
         }
         Ok(())
+    }
+
+    /// Acquires one frame from the pinned source for the active session.
+    pub fn next_audio_frame(&mut self, sequence: u32) -> Result<Option<AudioFrame>, ControlError> {
+        let Some(session_id) = self.last_active_session_id else {
+            return Ok(None);
+        };
+        if self.state != ControlState::Streaming {
+            return Ok(None);
+        }
+        let captured = self
+            .capture
+            .read_frame()
+            .map_err(ControlError::CaptureRead)?;
+        Ok(Some(AudioFrame::new(session_id, sequence, captured.pcm)))
     }
 
     fn handle_message_without_advance(
