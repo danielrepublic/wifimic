@@ -25,3 +25,7 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 ## 2026-08-22
 
 - Task 12's Rust LSP requests timed out on the client files as expected from the inherited workspace limitation. Cargo focused tests, workspace tests/build, and workspace Clippy all passed; no live hardware claim was substituted.
+
+## 2026-08-22
+
+- Todo 19 live Ack acceptance is blocked by the active remote ELF being older than the current server control-loop commits. The real Start packet reaches the UFW peer accept rule, but the stale listener returns no Ack within the bounded 5-second receive window. Rebuild/install/restart is intentionally not included because this task forbids changing service state; rerun the ignored harness after a normal deployment refresh.
