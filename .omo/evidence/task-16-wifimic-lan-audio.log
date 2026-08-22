@@ -28,3 +28,16 @@ Faithful isolated harness verification (no live claim):
 
 External limitation:
 - No live `arch-daniel` update was attempted. The current Windows checkout has unrelated orchestration dirt, and the production server's exact source-IP gate requires a control smoke originating from peer `192.168.0.200`; localhost cannot honestly prove that path. No live service success, capture health, or rollback result is claimed.
+
+Topology correction — 2026-08-22:
+- The prior built-in localhost smoke was removed. `arch-daniel` listens on `192.168.0.210:6902` and Todo 7 admits only datagrams sourced by `192.168.0.200`; `127.0.0.1` is not a valid health source.
+- `WIFIMIC_CONTROL_SMOKE_HELPER` is now mandatory and must be an executable absolute path before systemd, source-status, fetch, build, or service mutation. The helper is invoked quoted and bounded with `192.168.0.210 6902` and must emit the exact complete-exchange marker `wifimic-control-smoke: PASS`.
+- Missing-helper preflight output: `wifimic server update aborted: WIFIMIC_CONTROL_SMOKE_HELPER is required: configure a peer-originated Start/Heartbeat/Stop Ack probe`; isolated assertions found the prior binary hash unchanged, service `active`, no systemctl log, and no staging directory.
+- Peer-helper harness: good revision `87903b31375d979565a5da404bc22beda1beebbe`; deliberately bad tag revision `4896f53` (harness commit); prior hash after good update `476b62ee772ce34d7497f7b88835ad07b795b52cfa4365d8174b67275bb9b734`; bad-helper rollback restored that hash and `active` service. Build failure also preserved both.
+
+Correction implementation receipt:
+- Updated updater SHA-256: f88dcce30ca40d733e5ced557202b8701a98a4aadd1735c838c70e34002536d4.
+- `C:\Program Files\Git\bin\bash.exe -n deploy/linux/update-wifimic-server.sh` — PASS; topology scan found no `127.0.0.1`, `SMOKE_BIND_ADDRESS`, or built-in Python smoke path.
+- `TASK16_PEER_HELPER_HARNESS_PASS` — PASS. The harness asserted missing-helper rejection before any fake systemctl call, unchanged binary hash, active service, and empty staging directory; configured helper received `192.168.0.210 6902`, then good update and bad-helper rollback passed hash/active/cleanup assertions.
+- `cargo build --workspace`, `cargo test --workspace`, and `cargo clippy --workspace --all-targets -- -D warnings` — PASS. Hardware/arch-daniel tests remained ignored as documented.
+- The final topology hardening fixes the helper target to `192.168.0.210:6902`; no environment override can redirect the production smoke to localhost or another endpoint.

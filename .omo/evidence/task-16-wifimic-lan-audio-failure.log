@@ -18,3 +18,11 @@ Bounded failure cases in the isolated harness:
 Security/cleanup receipt:
 - No credentials, password files, firewall commands, alternate backends, checkout reset, force-push, or persistent remote staging artifacts were used.
 - Operation output is temporary and redacts URL credentials/token/password patterns before failure output; the transaction directory is removed on success and failure.
+
+Topology defect correction — 2026-08-22:
+- The old localhost default is no longer present. The production server listens on `192.168.0.210:6902` and accepts only source `192.168.0.200`; a localhost datagram cannot be health evidence.
+- Missing-helper preflight exited 1 with: `wifimic server update aborted: WIFIMIC_CONTROL_SMOKE_HELPER is required: configure a peer-originated Start/Heartbeat/Stop Ack probe`.
+- The preflight harness asserted no `systemctl` invocation, unchanged prior binary SHA-256, active service state, and no transaction/staging leftovers.
+- With an explicit fake peer-helper path, the helper received `192.168.0.210 6902`, emitted the required complete-exchange marker on the good path, and deliberately failed after candidate restart on the bad-tag path; rollback restored prior hash and active service.
+- The abbreviated `4896f53` shown by Git's temporary worktree status is retained only as observed harness output; the rollback assertion used the actual resolved tag object internally and did not claim this abbreviated text as a production revision.
+- `WIFIMIC_SMOKE_HOST`/`WIFIMIC_SMOKE_PORT` are not accepted by the final updater; the helper target is fixed to the documented server endpoint, preventing a localhost override.
