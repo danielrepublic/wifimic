@@ -21,10 +21,12 @@ Observed deterministic result:
 {"Status":"Updated","Mode":"Test","Tag":"v1.0.0","ResolvedCommit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","ExecutablePath":"C:\\Program Files\\wifimic-client\\wifimic_client.exe","PriorHash":"80814ad46f05d7ebad4774fdcf6b1acca39a9c4e873f0be5d5fed0634543d068","CandidateHash":"ed0f2c706004fc9f03aa50f874c6987687514014330afd35304f28822d5db914","InstalledHash":"ed0f2c706004fc9f03aa50f874c6987687514014330afd35304f28822d5db914","TaskPath":"\\wifimic\\wifimic-client","TaskEnabled":true,"TaskState":"Running","Endpoint":"CABLE Input (VB-Audio Virtual Cable)","PriorTaskEnabled":true,"PriorTaskWasRunning":true}
 ```
 
-The fake event sequence proved the intended transaction order:
+The fake remote-only revision was unavailable until `FetchTags` marked the fake
+remote ref namespace available. The happy event sequence proved the intended
+transaction order:
 
 ```text
-GetSourceStatus, ResolveRevision, FetchTags, GetTask, GetRenderEndpointNames,
+GetSourceStatus, FetchTags, ResolveRevision, GetTask, GetRenderEndpointNames,
 EnsureDirectory, EnsureDirectory, AddDetachedWorktree, BuildCandidate,
 GetTask, GetRenderEndpointNames, WriteTransactionBytes, DisableTask, GetTask,
 StopTask, GetTask, AtomicInstallFile, RestoreTask, GetTask, EnableTask,
@@ -34,7 +36,7 @@ RemoveDirectoryTree
 
 Assertions passed:
 
-- the explicit revision resolved before fetching, and the source status was clean;
+- the source status was clean, and `FetchTags` completed before the explicit revision resolved;
 - the candidate was detached/staged and built before task mutation;
 - the installed hash changed to the candidate hash;
 - the canonical task path remained `\wifimic\wifimic-client`, enabled and `Running`;

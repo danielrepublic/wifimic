@@ -11,6 +11,7 @@ the updater emitted a deterministic state receipt and removed the state root.
 PASS bad-revision: exit=1; prior=True,enabled=True,xml=True,clean=True
 PASS ambiguous-revision: exit=1; prior=True,enabled=True,xml=True,clean=True
 PASS dirty-checkout: exit=1; prior=True,enabled=True,xml=True,clean=True
+PASS fetch-failure: exit=1; prior=True,enabled=True,xml=True,clean=True
 PASS build-failure: exit=1; prior=True,enabled=True,xml=True,clean=True
 PASS endpoint-failure: exit=1; prior=True,enabled=True,xml=True,clean=True
 PASS task-registration-failure: exit=1; prior=True,enabled=True,xml=True,clean=True
@@ -19,6 +20,7 @@ PASS start-failure: exit=1; prior=True,enabled=True,xml=True,clean=True
 PASS health-timeout: exit=1; prior=True,enabled=True,xml=True,clean=True
 PASS interrupted-swap: exit=1; prior=True,enabled=True,xml=True,clean=True
 PASS malformed-revision: exit=1; prior=True,enabled=True,xml=True,clean=True
+PASS argument-injection: exit=1; prior=True,enabled=True,xml=True,clean=True
 Task 17 deterministic fake-operation matrix: PASS
 ```
 
@@ -32,7 +34,8 @@ The receipt and matrix proved prior executable hash preservation, exact task XML
 preservation, task re-enable/restart, and cleanup after failures before build,
 after candidate build, during stop/start, during health, and immediately after
 the atomic swap. The bad-revision and malformed-revision cases failed before
-candidate build or mutation; the dirty-checkout case failed before fetch.
+candidate build or mutation; the dirty-checkout case failed before fetch; and a
+bounded fetch failure left the prior state unchanged.
 
 Revision contract probes also returned exit 1 for missing `-Tag`, a leading-space
 revision, and an option-like `--bad` revision. No operation log was produced for
