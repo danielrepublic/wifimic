@@ -22,6 +22,8 @@ is_active() {
 apply_nft_rules() {
     nft delete table inet wifimic_server 2>/dev/null || true
     nft -f "$SCRIPT_DIR/wifimic-server.nft"
+    nft list chain inet wifimic_server input | grep -Fq 'ip saddr 192.168.0.200 udp dport 6902 counter' || die 'nftables peer accept rule was not present after apply'
+    nft list chain inet wifimic_server input | grep -Fq 'udp dport 6902 counter drop' || die 'nftables scoped drop rule was not present after apply'
 }
 
 require_root
@@ -60,15 +62,25 @@ fi
 # iptables-nft ruleset here, so never enable nftables.service beside it.
 if [[ "$ufw_active" -eq 1 ]]; then
     command -v ufw >/dev/null 2>&1 || die 'ufw.service is active but the ufw command is unavailable'
-    current_rules="$(ufw status 2>/dev/null || true)"
-    if grep -Eq '6902[^[:space:]]*/udp[[:space:]].*ALLOW IN[[:space:]]+Anywhere|6902[^[:space:]]*[[:space:]]+ALLOW IN[[:space:]]+Anywhere' <<<"$current_rules"; then
+    current_rules="$(ufw status numbered 2>/dev/null || true)"
+    if grep -Eq '(^|[[:space:]])6902/udp[[:space:]]+ALLOW IN[[:space:]]+Anywhere([[:space:]]|$)' <<<"$current_rules"; then
         die 'ufw already exposes UDP 6902 beyond the required peer; refusing to widen exposure'
     fi
-    if ! grep -Fq '6902/udp' <<<"$current_rules"; then
+    changed=0
+    if ! grep -Eq '(^|[[:space:]])6902/udp[[:space:]]+ALLOW IN[[:space:]]+192\.168\.0\.200([[:space:]]|$)' <<<"$current_rules"; then
         ufw insert 1 allow from "$PEER_IP" to any port "$UDP_PORT" proto udp comment 'wifimic-server peer'
-        ufw insert 2 deny "$UDP_PORT"/udp comment 'wifimic-server default drop'
+        changed=1
+    fi
+    if ! grep -Eq '(^|[[:space:]])6902/udp[[:space:]]+DENY IN[[:space:]]+Anywhere([[:space:]]|$)' <<<"$current_rules"; then
+        ufw deny "$UDP_PORT"/udp comment 'wifimic-server default drop'
+        changed=1
+    fi
+    if [[ "$changed" -eq 1 ]]; then
         ufw reload
     fi
+    final_rules="$(ufw status numbered 2>/dev/null || true)"
+    grep -Eq '(^|[[:space:]])6902/udp[[:space:]]+ALLOW IN[[:space:]]+192\.168\.0\.200([[:space:]]|$)' <<<"$final_rules" || die 'UFW peer allow rule was not present after reload'
+    grep -Eq '(^|[[:space:]])6902/udp[[:space:]]+DENY IN[[:space:]]+Anywhere([[:space:]]|$)' <<<"$final_rules" || die 'UFW scoped drop rule was not present after reload'
     exit 0
 fi
 
