@@ -65,3 +65,9 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 
 - The capture module stays API-compatible when `CaptureHandle` remains the facade and the public types/errors, frame reader, and `parec` process seam move into sibling private modules; `pub(super)` test seams avoid exposing implementation details.
 - Measuring pure LOC after extraction gave 102 for `capture.rs`, 88 for `capture_types.rs`, 39 for `capture_reader.rs`, and 114 for `capture_process.rs`, all below the repository's 250-LOC ceiling.
+
+## 2026-08-22
+
+- The jitter buffer's public facade can remain stable while `types.rs`, `buffer.rs`, and `adaptation.rs` own playout data, sequence-aware queue behavior, and target adaptation respectively; private `pub(super)` seams preserve the existing API without widening implementation visibility.
+- Refactor measurements are 17 pure LOC for `jitter.rs`, 168 for `jitter/buffer.rs`, 86 for `jitter/types.rs`, 108 for `jitter/adaptation.rs`, and 231 for the unchanged property/scenario tests.
+- The previously reported two logging rotation failures did not reproduce during the post-refactor workspace test; no logging code was changed and no issue entry is required.
