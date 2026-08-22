@@ -1,0 +1,32 @@
+# Task 15 — Windows interactive Scheduled Task installer
+# 2026-08-22
+
+Implementation:
+- Added deploy/windows/install-wifimic-client.ps1.
+- Canonical model is literal: C:\Program Files\wifimic-client, \wifimic\wifimic-client, firewall DisplayName wifimic-client, UDP 6902, and remote 192.168.0.210/32.
+- The task XML is generated in memory and verified for LogonTrigger, Author/InteractiveToken, direct wifimic_client.exe execution, and absence of password/service credentials.
+- Native operations are dependency-injected. TestMode and DryRun use an isolated fake state root and never call Scheduled Task, firewall, or canonical file APIs.
+- The transaction captures prior task/firewall/executable state before mutation and restores or removes every changed artifact after a failure.
+
+PowerShell 5.1 syntax:
+- POWERSHELL_PARSE_PASS
+
+Deterministic fake suite:
+- FAKE_HAPPY_PASS
+- WRONG_ENDPOINT_ROLLBACK_PASS
+- NATIVE_FAILURE_ROLLBACK_PASS
+- INTERRUPTED_COPY_ROLLBACK_PASS
+- DRY_RUN_PASS
+- TASK15_FOCUSED_FAKE_SUITE_PASS
+- Every fake state root reported STATE_EXISTS=False after the run.
+
+Read-only live host checks:
+- REAL_ENDPOINT_ENUMERATION_PASS
+- Enumerated exact endpoint: CABLE Input (VB-Audio Virtual Cable)
+- Also enumerated CABLE Output (VB-Audio Virtual Cable); the installer requires the Input name and does not select a default endpoint.
+- READONLY_TASK_INSPECTION=ABSENT
+- READONLY_FIREWALL_INSPECTION=ABSENT
+- No native install was attempted: -AcceptHostMutation was not supplied, so no real task, firewall rule, executable, or client process was changed.
+
+Workspace impact:
+- No Rust source was changed by Task 15.
