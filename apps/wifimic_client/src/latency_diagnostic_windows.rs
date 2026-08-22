@@ -3,12 +3,9 @@ use std::thread::sleep;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use thiserror::Error;
-use wifimic_protocol::latency::{
-    application_latency_us, deterministic_tone_frame, LatencyStats, CONSERVATIVE_P95_MARGIN_US,
-};
 use wifimic_protocol::{AudioFrame, SAMPLE_RATE_HZ};
 
-use super::{detect_tone_onset, CAPTURE_ENDPOINT};
+use super::{detect_tone_onset, translate_client_timestamp_to_server, CAPTURE_ENDPOINT};
 
 #[path = "latency_diagnostic_capture.rs"]
 mod capture;
@@ -17,7 +14,6 @@ use capture::{CaptureError, CaptureStream};
 const CONTROL_READ_TIMEOUT: Duration = Duration::from_millis(1);
 const SESSION_ACK_TIMEOUT: Duration = Duration::from_secs(20);
 const MEASUREMENT_INTERVAL: Duration = Duration::from_secs(1);
-const TONE_FRAME_COUNT: u32 = 20;
 const TONE_CAPTURE_TIMEOUT: Duration = Duration::from_millis(250);
 const TONE_SAMPLE_TIMESTAMP_SCALE: u64 = 1_000_000;
 
@@ -39,12 +35,51 @@ pub(crate) enum LatencyDiagnosticError {
     ToneOnsetTimeout { timeout_ms: u64 },
     #[error("the latency diagnostic collected no measurements")]
     NoMeasurements,
-    #[error("system clock is before the Unix epoch")]
-    ClockBeforeEpoch,
+    #[error("the receive/render pipeline produced no frame for the detected tone")]
+    NoRenderedToneFrame,
+    #[error("the detected tone had no capture timestamp")]
+    MissingToneTimestamp,
 }
 
-type ClientControl =
-    crate::control::ControlPlane<crate::control::UdpClientSocket, crate::render::Renderer>;
+type ClientControl = crate::control::ControlPlane<
+    crate::control::UdpClientSocket,
+    SequenceRenderer<crate::render::Renderer>,
+>;
+
+struct SequenceRenderer<R> {
+    inner: R,
+    last_sequence: Option<u32>,
+}
+
+impl<R> SequenceRenderer<R> {
+    fn new(inner: R) -> Self {
+        Self {
+            inner,
+            last_sequence: None,
+        }
+    }
+
+    fn last_sequence(&self) -> Option<u32> {
+        self.last_sequence
+    }
+}
+
+impl<R> crate::control::AudioRenderer for SequenceRenderer<R>
+where
+    R: crate::control::AudioRenderer,
+{
+    fn render_frame(&mut self, frame: &AudioFrame) -> Result<(), crate::render::RenderError> {
+        self.inner.render_frame(frame)?;
+        self.last_sequence = Some(frame.sequence);
+        Ok(())
+    }
+}
+
+struct ToneOnset {
+    sequence: u32,
+    client_onset_us: u64,
+    server_onset_us: u64,
+}
 
 pub(super) fn run(duration: Duration) -> Result<(), LatencyDiagnosticError> {
     let mut socket =
@@ -63,7 +98,9 @@ pub(super) fn run(duration: Duration) -> Result<(), LatencyDiagnosticError> {
         duration.as_secs()
     );
     let origin = Instant::now();
-    let renderer = crate::render::Renderer::open(crate::render::RenderConfig::vb_cable())?;
+    let renderer = SequenceRenderer::new(crate::render::Renderer::open(
+        crate::render::RenderConfig::vb_cable(),
+    )?);
     let capture = CaptureStream::open()?;
     let mut control = crate::control::ControlPlane::new(socket, renderer, origin);
     control.start(origin, epoch_millis())?;
@@ -71,39 +108,26 @@ pub(super) fn run(duration: Duration) -> Result<(), LatencyDiagnosticError> {
 
     let deadline = Instant::now() + duration;
     let mut next_measurement = Instant::now();
-    let session_id =
+    let _session_id =
         control
             .accepted_session_id()
             .ok_or(LatencyDiagnosticError::SessionAckTimeout {
                 timeout_ms: SESSION_ACK_TIMEOUT.as_millis() as u64,
             })?;
-    let mut sequence = 0_u32;
-    let mut latencies = Vec::new();
     while Instant::now() < deadline {
         let now = Instant::now();
         service_control(&mut control, now)?;
         if now >= next_measurement {
-            let latency = measure_tone(&control, &capture, session_id, sequence, offset_us)?;
-            println!("latency_sample sequence={sequence} raw_latency_us={latency}");
-            latencies.push(latency);
-            sequence = sequence.wrapping_add(TONE_FRAME_COUNT);
+            let onset = measure_tone(&mut control, &capture, offset_us)?;
+            println!(
+                "latency_onset sequence={} client_onset_us={} server_onset_us={} clock_offset_us={offset_us}",
+                onset.sequence, onset.client_onset_us, onset.server_onset_us
+            );
             next_measurement = now + MEASUREMENT_INTERVAL;
         }
         sleep(CONTROL_READ_TIMEOUT);
     }
     control.stop(Instant::now())?;
-    let stats = LatencyStats::from_microseconds(latencies.iter().copied());
-    if latencies.is_empty() {
-        return Err(LatencyDiagnosticError::NoMeasurements);
-    }
-    println!(
-        "latency_stats raw_p50_us={} raw_p95_us={} raw_p99_us={} conservative_p95_us={} conservative_p95_margin_us={}",
-        stats.raw_p50_us,
-        stats.raw_p95_us,
-        stats.raw_p99_us,
-        stats.conservative_p95_us,
-        CONSERVATIVE_P95_MARGIN_US
-    );
     Ok(())
 }
 
@@ -127,7 +151,7 @@ fn wait_for_session(
 fn service_control(
     control: &mut ClientControl,
     now: Instant,
-) -> Result<(), LatencyDiagnosticError> {
+) -> Result<Option<u32>, LatencyDiagnosticError> {
     match control.receive_once(now) {
         Ok(_) => {}
         Err(crate::control::ControlError::Transport(error))
@@ -138,48 +162,46 @@ fn service_control(
         Err(error) => return Err(error.into()),
     }
     control.advance(now, epoch_millis())?;
-    Ok(())
+    let render_outcome = control.render_ready(now)?;
+    Ok(match render_outcome {
+        crate::control::RenderOutcome::Audio => control.renderer().last_sequence(),
+        crate::control::RenderOutcome::Gap | crate::control::RenderOutcome::NotReady => None,
+    })
 }
 
 fn measure_tone(
-    control: &ClientControl,
+    control: &mut ClientControl,
     capture: &CaptureStream,
-    session_id: u64,
-    sequence: u32,
     offset_us: i64,
-) -> Result<u64, LatencyDiagnosticError> {
+) -> Result<ToneOnset, LatencyDiagnosticError> {
     capture.discard_available()?;
-    let render_client_us = unix_micros()?;
-    for frame_sequence in sequence..sequence.saturating_add(TONE_FRAME_COUNT) {
-        let frame = AudioFrame::new(
-            session_id,
-            frame_sequence,
-            deterministic_tone_frame(frame_sequence),
-        );
-        control.renderer().render_frame(&frame)?;
-    }
     let mut samples = Vec::new();
     let mut first_capture_us = None;
+    let mut first_rendered_sequence = None;
     let deadline = Instant::now() + TONE_CAPTURE_TIMEOUT;
     loop {
+        first_rendered_sequence =
+            first_rendered_sequence.or(service_control(control, Instant::now())?);
         for packet in capture.read_available()? {
             first_capture_us.get_or_insert(packet.acquired_at_us);
             samples.extend(packet.samples);
         }
         if let Some(onset_index) = detect_tone_onset(&samples) {
-            let onset_client_us = first_capture_us.unwrap_or(render_client_us).saturating_add(
+            let sequence =
+                first_rendered_sequence.ok_or(LatencyDiagnosticError::NoRenderedToneFrame)?;
+            let first_capture_us =
+                first_capture_us.ok_or(LatencyDiagnosticError::MissingToneTimestamp)?;
+            let onset_client_us = first_capture_us.saturating_add(
                 u64::try_from(onset_index)
                     .unwrap_or(u64::MAX)
                     .saturating_mul(TONE_SAMPLE_TIMESTAMP_SCALE)
                     / u64::from(SAMPLE_RATE_HZ),
             );
-            let linux_capture_frame_acquisition_us =
-                translate_client_anchor_to_linux(render_client_us, offset_us);
-            return Ok(application_latency_us(
-                linux_capture_frame_acquisition_us,
-                onset_client_us,
-                offset_us,
-            ));
+            return Ok(ToneOnset {
+                sequence,
+                client_onset_us: onset_client_us,
+                server_onset_us: translate_client_timestamp_to_server(onset_client_us, offset_us),
+            });
         }
         if Instant::now() >= deadline {
             return Err(LatencyDiagnosticError::ToneOnsetTimeout {
@@ -187,11 +209,6 @@ fn measure_tone(
             });
         }
     }
-}
-
-fn translate_client_anchor_to_linux(client_us: u64, offset_us: i64) -> u64 {
-    let translated = i128::from(client_us) + i128::from(offset_us);
-    u64::try_from(translated.max(0)).unwrap_or(u64::MAX)
 }
 
 fn epoch_millis() -> u64 {
@@ -202,9 +219,36 @@ fn epoch_millis() -> u64 {
         })
 }
 
-fn unix_micros() -> Result<u64, LatencyDiagnosticError> {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| u64::try_from(duration.as_micros()).unwrap_or(u64::MAX))
-        .map_err(|_| LatencyDiagnosticError::ClockBeforeEpoch)
+#[cfg(test)]
+mod tests {
+    use wifimic_protocol::AudioFrame;
+
+    use super::SequenceRenderer;
+
+    #[derive(Default)]
+    struct RecordingRenderer {
+        sequences: Vec<u32>,
+    }
+
+    impl crate::control::AudioRenderer for RecordingRenderer {
+        fn render_frame(&mut self, frame: &AudioFrame) -> Result<(), crate::render::RenderError> {
+            self.sequences.push(frame.sequence);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn sequence_renderer_observes_frames_that_reach_the_real_renderer_seam() {
+        // Given
+        let mut renderer = SequenceRenderer::new(RecordingRenderer::default());
+        let frame = AudioFrame::new(1, 42, [0; wifimic_protocol::PCM_PAYLOAD_BYTES]);
+
+        // When
+        crate::control::AudioRenderer::render_frame(&mut renderer, &frame)
+            .expect("recording renderer must accept the frame");
+
+        // Then
+        assert_eq!(renderer.last_sequence(), Some(42));
+        assert_eq!(renderer.inner.sequences, vec![42]);
+    }
 }

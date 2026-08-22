@@ -78,9 +78,15 @@ pub(crate) fn detect_tone_onset(samples: &[i16]) -> Option<usize> {
         })
 }
 
+#[must_use]
+pub(crate) fn translate_client_timestamp_to_server(client_us: u64, offset_us: i64) -> u64 {
+    let translated = i128::from(client_us) + i128::from(offset_us);
+    u64::try_from(translated.max(0)).unwrap_or(u64::MAX)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{detect_tone_onset, TONE_WINDOW_SAMPLES};
+    use super::{detect_tone_onset, translate_client_timestamp_to_server, TONE_WINDOW_SAMPLES};
 
     #[test]
     fn onset_detector_returns_none_for_silence() {
@@ -126,5 +132,18 @@ mod tests {
         // Then
         assert_eq!(first, Some(TONE_WINDOW_SAMPLES * 2));
         assert_eq!(second, first);
+    }
+
+    #[test]
+    fn client_onset_timestamp_is_translated_to_server_clock() {
+        // Given
+        let client_timestamp_us = 1_100_000;
+
+        // When
+        let server_timestamp_us =
+            translate_client_timestamp_to_server(client_timestamp_us, -25_000);
+
+        // Then
+        assert_eq!(server_timestamp_us, 1_075_000);
     }
 }

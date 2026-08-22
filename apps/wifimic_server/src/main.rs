@@ -1,5 +1,6 @@
 pub mod capture;
 pub mod control;
+mod diagnostic_capture;
 mod network;
 
 use std::io;
@@ -13,7 +14,8 @@ use wifimic_protocol::{
 };
 
 use crate::capture::CaptureHandle;
-use crate::control::{ControlError, ControlPlane};
+use crate::control::{CaptureController, ControlError, ControlPlane};
+use crate::diagnostic_capture::SyntheticCapture;
 
 const RECEIVE_POLL_INTERVAL: Duration = Duration::from_millis(1);
 
@@ -24,10 +26,21 @@ fn main() -> std::io::Result<()> {
     if std::env::args().any(|argument| argument == "--calibrate") {
         eprintln!("calibration responder enabled");
     }
+    if std::env::args().any(|argument| argument == "--diagnose-latency") {
+        eprintln!("latency diagnostic capture enabled");
+        return run_server(SyntheticCapture::new());
+    }
+    run_server(CaptureHandle::new())
+}
+
+fn run_server<C>(capture: C) -> io::Result<()>
+where
+    C: CaptureController,
+{
     let mut socket = network::UdpServerSocket::bind()?;
     socket.set_read_timeout(Some(RECEIVE_POLL_INTERVAL))?;
     let diagnostics = EventContext::logging(Instant::now());
-    let mut control = ControlPlane::new(CaptureHandle::new(), diagnostics);
+    let mut control = ControlPlane::new(capture, diagnostics);
     let mut peer: Option<SocketAddr> = None;
     let mut sequence = 0_u32;
 

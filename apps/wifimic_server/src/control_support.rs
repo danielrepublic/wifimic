@@ -21,6 +21,9 @@ pub trait CaptureController {
     fn start(&mut self) -> Result<(), CaptureError>;
     fn stop(&mut self) -> Result<(), CaptureError>;
     fn read_frame(&mut self) -> Result<CapturedFrame, CaptureError>;
+
+    /// Announces the protocol sequence assigned to the next acquired frame.
+    fn set_sequence(&mut self, _sequence: u32) {}
 }
 
 impl CaptureController for CaptureHandle {
@@ -109,6 +112,7 @@ where
         if self.state != ControlState::Streaming {
             return Ok(None);
         }
+        self.capture.set_sequence(sequence);
         let captured = match self.capture.read_frame() {
             Ok(captured) => captured,
             Err(error) => {
