@@ -408,14 +408,13 @@ function Invoke-WifimicClientUpdate {
     if (-not [string]::IsNullOrEmpty([string]$sourceStatus)) {
         Throw-WifimicUpdaterError -Code 'DirtyCheckout' -Message "The source checkout is dirty; refusing to fetch, build, or mutate the installed client. Changes: $sourceStatus"
     }
+    Invoke-WifimicOperation -Operations $Operations -Name 'FetchTags' -Arguments @($sourceRoot) | Out-Null
     $resolvedOutput = Invoke-WifimicOperation -Operations $Operations -Name 'ResolveRevision' -Arguments @($sourceRoot, $Revision)
     $resolvedLines = @(([string]$resolvedOutput) -split '\r?\n' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     if ($resolvedLines.Count -ne 1 -or $resolvedLines[0] -notmatch '^[0-9a-fA-F]{40}$') {
         Throw-WifimicUpdaterError -Code 'AmbiguousRevision' -Message "The explicit revision '$Revision' did not resolve to exactly one commit."
     }
     $resolvedCommit = $resolvedLines[0].ToLowerInvariant()
-    Invoke-WifimicOperation -Operations $Operations -Name 'FetchTags' -Arguments @($sourceRoot) | Out-Null
-
     $priorTask = Invoke-WifimicOperation -Operations $Operations -Name 'GetTask' -Arguments @($identity)
     $priorExecutable = Invoke-WifimicOperation -Operations $Operations -Name 'CaptureFile' -Arguments @($identity.ExecutablePath)
     if ($null -eq $priorTask) {
@@ -738,6 +737,7 @@ function New-WifimicFakeOperations {
         FailureConsumed = $false
         SourceDirty = $false
         WorktreeAdded = $false
+        Fetched = $false
         HealthForcedFailure = $false
     }
     $mapPath = {
@@ -782,10 +782,16 @@ function New-WifimicFakeOperations {
             if ($state.SourceDirty) { return ' M source' }
             return ''
         }.GetNewClosure()
-        FetchTags = { param($root) & $record 'FetchTags'; & $failOnce 'Fetch' }.GetNewClosure()
+        FetchTags = {
+            param($root)
+            & $record 'FetchTags'
+            & $failOnce 'Fetch'
+            $state.Fetched = $true
+        }.GetNewClosure()
         ResolveRevision = {
             param($root, $revision)
             & $record 'ResolveRevision'
+            if (-not $state.Fetched) { Throw-WifimicUpdaterError -Code 'RevisionNotFetched' -Message 'The fake remote-only revision was resolved before FetchTags.' }
             & $failOnce 'BadRevision'
             if ($RequestedFailure -eq 'AmbiguousRevision') { return "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`nbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" }
             return 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
