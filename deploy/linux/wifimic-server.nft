@@ -1,0 +1,8 @@
+table inet wifimic_server {
+    chain input {
+        type filter hook input priority -100; policy accept;
+
+        ip saddr 192.168.0.200 udp dport 6902 counter accept comment "wifimic-server peer"
+        udp dport 6902 counter drop comment "wifimic-server default drop"
+    }
+}
