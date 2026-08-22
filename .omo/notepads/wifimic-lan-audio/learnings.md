@@ -23,3 +23,15 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 - `wifimic_diagnostics` keeps event records metadata-only: control-plane events carry typed IDs, counters, durations, and classifications, while `Display` emits stable fields without PCM, payload, or sample content.
 - Injected `Instant` values make the rate limiter boundary, reset, and 1000-event heartbeat-timeout burst deterministic; the configured one-second gate admits exactly one event from the 0–999 ms burst.
 - Rust LSP timed out as expected from prior workspace guidance; package tests, Clippy with `-D warnings`, workspace build, and crate documentation all passed.
+
+## 2026-08-22T16:09:53.1634831+08:00
+
+- CodeGraph had no indexed `wifimic_server`/`micdriver_client` network symbols for this checkout, so `apps/wifimic_server/src/network.rs` was created from the task contract; the reference was inspected directly at `C:\Users\Daniel\Documents\opencode\micdriver\apps\micdriver_client\src\network.rs` because the requested `apps/micdriver_client` path does not exist in wifimic.
+- The server network seam binds `0.0.0.0:6902`, stores only the fixed typed peer `192.168.0.200`, compares IPv4 addresses exactly, ignores source ports, and returns no datagram before any later consumer for rejected control/audio packets.
+- Final focused tests, workspace build, and workspace Clippy passed from a clean detached verification worktree; the repository checkout retained unrelated in-progress capture/client edits unstaged. Rust LSP timed out again, matching the inherited limitation.
+
+## 2026-08-22T08:09:42.1821565Z
+
+- Live preflight on `arch-daniel` found `ufw.service` active while both `iptables.service` and `nftables.service` were inactive; `ufw` owns the existing iptables-nft ruleset. The deployment selector used UFW's persistent, peer-scoped allow plus explicit port-scoped deny and deliberately did not enable nftables.service beside the active firewall manager.
+- UDP 6902 from `192.168.0.200` incremented the UFW accept counter once; the scoped drop counter remained zero because no third reachable LAN source was available. The third-source limitation is recorded in task-8 failure evidence.
+- The user unit parses with the reference hardening intact, but `~/.local/bin/wifimic_server` is not installed yet, so the remote start probe ended in `203/EXEC`; no fake executable was staged to manufacture an active-service result.
