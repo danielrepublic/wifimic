@@ -44,3 +44,8 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 - Todo 13 uses the canonical resource ordinal `1`, labels `Restart`/`Exit`, and tooltip `wifimic-client`; no extra tray capabilities or service/IPC layer is introduced.
 - Restart dispatches directly to `ControlPlane::restart(now, epoch_ms)` and never calls Stop first. Exit calls `ControlPlane::stop(now)` before marking the current process run for shutdown, including when Stop returns a typed error; the Scheduled Task remains outside this process's lifecycle.
 - Task 15 uses an explicit `-AcceptHostMutation` safety gate for real installation; `-TestMode` and `-DryRun` select only injected fake operations. Existing canonical artifacts are updated only when their ownership signatures match, otherwise the installer refuses before mutation; owned prior artifacts are captured and restored on failure.
+
+## 2026-08-22
+
+- Task 17 keeps the installer isolated and changes no firewall state. It pins the canonical `C:\Program Files\wifimic-client\wifimic_client.exe` and `\wifimic\wifimic-client` identities, validates the exact VB-CABLE Input endpoint, and requires `-AcceptHostMutation` for native task/file operations.
+- Revision resolution is performed after the clean-checkout gate and before tag fetching; the resolved commit, detached worktree, prior executable bytes/hash, prior task XML/enabled state, and cleanup roots belong to one rollback transaction.

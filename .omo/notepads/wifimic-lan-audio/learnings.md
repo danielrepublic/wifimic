@@ -119,3 +119,8 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 - The live host preflight was literal: `ufw.service=active`, `nftables.service=inactive`, `iptables.service=inactive`; UFW's peer accept counter rose from `1` to `3` while the scoped UDP 6902 drop counter stayed `0`. This proves firewall-path acceptance, not application delivery.
 - The installed remote ELF was stale relative to the current control loop: its mtime was `16:44:50 +0800`, while `b0d17cb` wiring the control plane into the UDP loop was committed at `17:15:04 +0800`. The Ack timeout is therefore recorded as a deployment freshness limitation; no rebuild/restart was performed.
 - Task 15: exact PnP AudioEndpoint enumeration found both VB-CABLE directions live; matching only `CABLE Input (VB-Audio Virtual Cable)` keeps the render preflight direction-aware and avoids default-device fallback.
+
+## 2026-08-22
+
+- Task 17's Windows updater validates the explicit revision and clean checkout before fetching, builds a detached worktree candidate before disabling the canonical interactive task, and uses same-volume temporary-file replacement for the installed executable.
+- The injected PowerShell 5.1 matrix deterministically covered pre-build, build, task stop/start, health, task-registration, and interrupted-swap failures; every recoverable failure restored the prior hash and task XML, re-enabled/restarted the task, and removed staging/transaction state.

@@ -38,3 +38,7 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 
 - Todo 19 live Ack acceptance is blocked by the active remote ELF being older than the current server control-loop commits. The real Start packet reaches the UFW peer accept rule, but the stale listener returns no Ack within the bounded 5-second receive window. Rebuild/install/restart is intentionally not included because this task forbids changing service state; rerun the ignored harness after a normal deployment refresh.
 - Task 15's live installation was intentionally not attempted. The script requires the explicit `-AcceptHostMutation` switch plus an elevated interactive Windows session before it can register the task, change the firewall, or copy into Program Files. Read-only inspection found the canonical task and firewall rule absent; deterministic fake tests cover the mutation and rollback paths instead.
+
+## 2026-08-22
+
+- Task 17's live updater run was intentionally not attempted. Read-only inspection found the exact VB-CABLE Input endpoint but no canonical `\wifimic\wifimic-client` task; no Program Files, Scheduled Task, process, or firewall mutation was authorized.

@@ -30,3 +30,7 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 
 - The Todo 19 live Ack scenario cannot pass against the currently active remote ELF: the host firewall accepts the real peer packet, but the installed binary predates the current control-plane loop. This remains an explicit deployment limitation rather than a reason to weaken the harness or mutate the remote service during this task.
 - No unresolved Task 15 implementation blocker remains. Live Scheduled Task/firewall installation and post-install `Ready` inspection remain unclaimed because the safe acceptance boundary was not authorized; the read-only host check confirmed both canonical artifacts are absent and the fake rollback receipts are clean.
+
+## 2026-08-22
+
+- No unresolved Task 17 implementation blocker remains. Native Windows task/binary mutation was not exercised because the canonical task is absent and host acceptance was not supplied; PowerShell parse plus the deterministic injected-operation rollback matrix are authoritative for this checkout.
