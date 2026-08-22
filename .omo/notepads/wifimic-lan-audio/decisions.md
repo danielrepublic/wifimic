@@ -43,3 +43,4 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 
 - Todo 13 uses the canonical resource ordinal `1`, labels `Restart`/`Exit`, and tooltip `wifimic-client`; no extra tray capabilities or service/IPC layer is introduced.
 - Restart dispatches directly to `ControlPlane::restart(now, epoch_ms)` and never calls Stop first. Exit calls `ControlPlane::stop(now)` before marking the current process run for shutdown, including when Stop returns a typed error; the Scheduled Task remains outside this process's lifecycle.
+- Task 15 uses an explicit `-AcceptHostMutation` safety gate for real installation; `-TestMode` and `-DryRun` select only injected fake operations. Existing canonical artifacts are updated only when their ownership signatures match, otherwise the installer refuses before mutation; owned prior artifacts are captured and restored on failure.
