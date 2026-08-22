@@ -379,6 +379,7 @@ version = "0.1.0"
 name = "wifimic_server"
 version = "0.1.0"
 dependencies = [
+ "wifimic_diagnostics",
  "wifimic_protocol",
 ]
 

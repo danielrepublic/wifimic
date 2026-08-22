@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+wifimic_diagnostics = { path = "../../crates/wifimic_diagnostics" }
 wifimic_protocol = { path = "../../crates/wifimic_protocol" }
 
 [lints]
