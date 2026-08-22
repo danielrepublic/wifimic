@@ -88,15 +88,6 @@ impl UdpServerSocket {
             payload: self.receive_buffer[..received].to_vec(),
         }))
     }
-
-    /// Returns the local address selected by the operating system.
-    ///
-    /// # Errors
-    ///
-    /// Returns the operating-system error if the local address cannot be read.
-    pub fn local_addr(&self) -> io::Result<SocketAddr> {
-        self.socket.local_addr()
-    }
 }
 
 #[cfg(test)]
@@ -130,6 +121,7 @@ mod tests {
         let mut server = UdpServerSocket::bind_for_test().expect("ephemeral server must bind");
         let sender = UdpSocket::bind("127.0.0.1:0").expect("ephemeral sender must bind");
         let destination = server
+            .socket
             .local_addr()
             .expect("server address must be readable");
 
