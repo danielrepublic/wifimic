@@ -133,6 +133,18 @@ function Get-WifimicTaskXmlNode {
     return $node
 }
 
+function Get-WifimicTaskXmlNodeOptional {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][xml]$Xml,
+        [Parameter(Mandatory = $true)][string]$XPath
+    )
+
+    $namespace = New-Object System.Xml.XmlNamespaceManager($Xml.NameTable)
+    $namespace.AddNamespace('task', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
+    return $Xml.SelectSingleNode($XPath, $namespace)
+}
+
 function New-WifimicTaskXml {
     [CmdletBinding()]
     param([Parameter(Mandatory = $true)][pscustomobject]$Identity)
@@ -190,7 +202,8 @@ function ConvertTo-WifimicTaskDefinition {
     [xml]$xml = $XmlText
     $command = (Get-WifimicTaskXmlNode -Xml $xml -XPath '//task:Actions/task:Exec/task:Command').InnerText
     $workingDirectory = (Get-WifimicTaskXmlNode -Xml $xml -XPath '//task:Actions/task:Exec/task:WorkingDirectory').InnerText
-    $arguments = (Get-WifimicTaskXmlNode -Xml $xml -XPath '//task:Actions/task:Exec/task:Arguments').InnerText
+    $argumentsNode = Get-WifimicTaskXmlNodeOptional -Xml $xml -XPath '//task:Actions/task:Exec/task:Arguments'
+    $arguments = if ($null -eq $argumentsNode) { '' } else { $argumentsNode.InnerText }
     $uri = (Get-WifimicTaskXmlNode -Xml $xml -XPath '//task:RegistrationInfo/task:URI').InnerText
     $principal = Get-WifimicTaskXmlNode -Xml $xml -XPath '//task:Principals/task:Principal'
     $principalId = $principal.Attributes['id'].Value
@@ -537,7 +550,7 @@ function Invoke-WifimicInstall {
     }
     finally {
         if ($null -ne $stageRoot) {
-            Invoke-WifimicOperation -Operations $Operations -Name 'RemoveDirectoryIfEmpty' -Arguments @($stageRoot) | Out-Null
+            Invoke-WifimicOperation -Operations $Operations -Name 'RemoveDirectory' -Arguments @($stageRoot) | Out-Null
         }
         if ($installRootCreated) {
             Invoke-WifimicOperation -Operations $Operations -Name 'RemoveDirectoryIfEmpty' -Arguments @($identity.InstallRoot) | Out-Null
@@ -636,6 +649,12 @@ function New-WifimicNativeOperations {
             [System.IO.File]::WriteAllBytes($path, $bytes)
         }
         RemoveFile = { param($path) Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue }
+        RemoveDirectory = {
+            param($path)
+            if (Test-Path -LiteralPath $path -PathType Container) {
+                Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Stop
+            }
+        }
         RemoveDirectoryIfEmpty = {
             param($path)
             if (Test-Path -LiteralPath $path -PathType Container) {
@@ -735,6 +754,10 @@ function New-WifimicFakeOperations {
             param($path)
             & $record 'RemoveFile'
             Remove-Item -LiteralPath (& $mapPath $path) -Force -ErrorAction SilentlyContinue
+        }.GetNewClosure()
+        RemoveDirectory = {
+            param($path)
+            Remove-Item -LiteralPath (& $mapPath $path) -Recurse -Force -ErrorAction SilentlyContinue
         }.GetNewClosure()
         RemoveDirectoryIfEmpty = {
             param($path)

@@ -70,3 +70,11 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
   stream existed to terminate. Consequently the required last-heartbeat-to-Idle elapsed time,
   capture stop, fresh-session recovery, and server survival during the scenario are all unobserved
   and remain FAIL rather than simulated.
+
+## 2026-08-22 Task Scheduler round-trip fix
+
+- The first real Windows installer run exposed that Task Scheduler drops an empty `<Arguments />` element when `Export-ScheduledTask` round-trips the registered XML. `ConvertTo-WifimicTaskDefinition` previously treated that valid omission as malformed XML and aborted immediately after `schtasks.exe /Create` succeeded. The installer now uses an Arguments-only optional XML lookup and resolves a missing node to ''; all mandatory task nodes retain strict missing-node validation.
+
+## 2026-08-22 Native cleanup follow-up
+
+- The same failed native install left the copied executable in its private `.wifimic-stage-<guid>` directory because cleanup used `RemoveDirectoryIfEmpty` even though the stage directory is intentionally non-empty. The installer now uses a dedicated recursive `RemoveDirectory` operation for stage cleanup while preserving `RemoveDirectoryIfEmpty` for the install root. The two fixes together cover the live failure: Task Scheduler's valid empty-Arguments omission is accepted, and private staging state is removed on every completion or rollback path.
