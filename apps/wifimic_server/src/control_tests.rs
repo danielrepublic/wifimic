@@ -42,6 +42,28 @@ fn control_streams_while_heartbeats_arrive_within_30s() {
 }
 
 #[test]
+fn control_start_wire_emits_session_started_and_ack() {
+    // Given
+    let (mut plane, _state, collector, origin) = plane(vec![true]);
+
+    // When
+    let ack = command(&mut plane, ControlMessage::Start { session_id: 11 }, origin);
+
+    // Then
+    assert_eq!(
+        ack,
+        Some(ControlMessage::Ack {
+            session_id: 11,
+            acked_kind: wifimic_protocol::START_TAG,
+        })
+    );
+    assert!(collector
+        .records()
+        .iter()
+        .any(|record| matches!(record.event, Event::SessionStarted { session_id: 11 })));
+}
+
+#[test]
 fn control_stops_capture_after_30s_without_heartbeat() {
     // Given
     let (mut plane, state, collector, origin) = plane(vec![true]);
