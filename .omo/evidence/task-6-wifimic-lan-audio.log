@@ -1,0 +1,48 @@
+# Task 6 Linux control-plane happy-path evidence
+# Captured: 2026-08-22
+
+## Focused acceptance tests
+
+Command: `cargo test -p wifimic_server control -- --nocapture`
+Result: PASS — 7 passed, 0 failed.
+
+The seven deterministic tests cover:
+- Start plus Heartbeat beyond 30 seconds, with decoded Ack responses for every accepted command.
+- Heartbeat timeout to Idle and capture stop.
+- Failed capture start, 5-second retry, and same-session recovery to Streaming.
+- Explicit Stop to Idle while preserving the session high-water mark.
+- Strictly stale/replayed Start rejection.
+- Exact-session mismatch rejection for Heartbeat and Stop.
+- Streaming Start supersession, with one capture start and the old session rejected afterward.
+
+Command: `cargo test -p wifimic_server control_streams_while_heartbeats_arrive_within_30s -- --nocapture`
+Result: PASS — 1 passed, 0 failed.
+
+Command: `cargo test -p wifimic_server control_superseding_start_during_streaming_does_not_restart_capture -- --nocapture`
+Result: PASS — 1 passed, 0 failed.
+
+## Required workspace gates
+
+Command: `cargo build --workspace`
+Result: PASS.
+
+Command: `cargo test --workspace -- --nocapture`
+Result: PASS — server 17 passed/1 ignored; client 26 passed/2 ignored; diagnostics 5 passed; protocol 11 passed.
+
+Command: `cargo clippy --workspace --all-targets -- -D warnings`
+Result: PASS.
+
+Command: `cargo clippy -p wifimic_server --all-targets -- -D warnings`
+Result: PASS.
+
+## Size and cleanup
+
+Pure non-comment LOC: `control.rs` 248; `control_support.rs` 68; `control_tests.rs` 169;
+`control_test_support.rs` 108; `main.rs` 36; `network.rs` 101. Every touched Rust source is below 250.
+
+Cleanup receipt: fake capture and Ack sink are in-memory test fixtures; no real `parec` was
+spawned. `Get-Process -Name wifimic_server` reported 0 processes and the UDP 6902 endpoint
+check reported 0 endpoints after the test run.
+
+LSP note: Rust LSP timed out on the changed files, matching the inherited workspace limitation;
+Cargo diagnostics remained authoritative.

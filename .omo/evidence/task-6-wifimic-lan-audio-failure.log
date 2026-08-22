@@ -1,0 +1,36 @@
+# Task 6 Linux control-plane failure-path evidence
+# Captured: 2026-08-22
+
+## Red test before implementation
+
+Command: `cargo test -p wifimic_server control -- --nocapture`
+Result: EXPECTED FAIL before the state machine existed. The compiler reported unresolved
+`CaptureController`, `ControlPlane`, `ControlState`, and `CaptureError` imports in the focused
+tests. This established the red test seam rather than a test typo or runtime failure.
+
+## Rejection and timeout failure paths
+
+Command: `cargo test -p wifimic_server control_rejects_stale_or_replayed_session_id -- --nocapture`
+Result: PASS — 1 passed, 0 failed. A stale Start produced no Ack, did not change state, and
+did not start capture; the Stop high-water mark remains available to reject delayed replay.
+
+Command: `cargo test -p wifimic_server control_stops_capture_after_30s_without_heartbeat -- --nocapture`
+Result: PASS — 1 passed, 0 failed. An injected time beyond the 30-second deadline transitioned
+Streaming to Idle, stopped the fake capture exactly once, and emitted HeartbeatTimeout.
+
+Adversarial checks in `cargo test -p wifimic_server control -- --nocapture` also passed for
+mismatched Heartbeat/Stop IDs and old-session Heartbeat after Streaming supersession. Rejected
+commands returned no Ack and emitted typed ControlMessageRejected diagnostics.
+
+## Cleanup receipt
+
+No real Linux source, `parec`, child process, socket listener, timer thread, temporary file, or
+fake capture resource remains. The post-test process probe reported
+`wifimic_server_processes=0`; the UDP probe reported `udp_6902_endpoints=0`.
+
+No client, protocol wire layout, deployment, plan checkbox, `.omo/boulder.json`, or continuation
+metadata was changed for this task. Existing dirty plan/boulder/continuation artifacts were left
+unstaged as required.
+
+LSP failure-path note: six Rust `lsp_diagnostics` requests timed out; this is the inherited Rust
+LSP limitation and not a Cargo failure. Workspace build, tests, and `-D warnings` Clippy passed.
