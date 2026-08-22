@@ -28,5 +28,13 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 
 ## 2026-08-22
 
+- Remove the built-in localhost control probe from the updater. A peer-originated `WIFIMIC_CONTROL_SMOKE_HELPER` is mandatory, receives the explicit server host/port, is validated as an executable absolute path before mutation, is bounded, and must report the complete Ack exchange marker.
+
+## 2026-08-22
+
+- Fix the peer smoke destination to `192.168.0.210:6902` rather than allowing environment overrides; this prevents accidentally turning the truthful peer check back into localhost health.
+
+## 2026-08-22
+
 - Client reachability is a typed transition: Start Ack establishes the pending ID, matching Heartbeat Acks reset the missed counter, and two missed Heartbeat Acks enter Unreachable. A retry always mints a new ID with the shared monotonic generator; no rejected or unacknowledged ID is reused.
 - The client trusts exactly IPv4 `192.168.0.210` for inbound Ack and audio datagrams, while accepting any source port from that IP. Filtering occurs before protocol state or jitter/render mutation.

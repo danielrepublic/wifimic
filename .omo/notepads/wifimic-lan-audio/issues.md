@@ -24,6 +24,10 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 
 ## 2026-08-22
 
+- Verification found and fixed the updater's unsafe localhost smoke default. Missing helper now fails before systemctl discovery/source status; live peer-originated helper execution remains unavailable in this environment.
+
+## 2026-08-22
+
 - Task 12's Rust LSP requests timed out on the client files as expected from the inherited workspace limitation. Cargo focused tests, workspace tests/build, and workspace Clippy all passed; no live hardware claim was substituted.
 
 ## 2026-08-22

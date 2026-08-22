@@ -16,6 +16,10 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 
 ## 2026-08-22
 
+- The live peer helper is still an external prerequisite: no helper that can originate from `192.168.0.200` is available here, so live update success remains intentionally unclaimed.
+
+## 2026-08-22
+
 - No unresolved Task 12 implementation blocker remains. Live two-host control/audio behavior is intentionally deferred to the later deployment and Wave 5 acceptance todos; this task's evidence makes no hardware or firewall claim.
 
 ## 2026-08-22

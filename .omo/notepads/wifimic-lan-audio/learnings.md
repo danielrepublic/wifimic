@@ -106,6 +106,10 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 
 ## 2026-08-22
 
+- The production control smoke cannot default to localhost: the server listens on `192.168.0.210:6902` but rejects every source except the Windows peer `192.168.0.200`. Task 16 now requires an executable absolute peer-helper before any service or checkout mutation.
+
+## 2026-08-22
+
 - Todo 19's ignored harness keeps the live network/firewall scenario separate from the application fallback: it sends real protocol Start bytes from a socket bound to `192.168.0.200`, validates a real Ack when available, and independently inspects the active firewall backend before and after traffic. A Drop guard sends Stop on panic/timeout so a failed live probe does not intentionally leave a session active.
 - The live host preflight was literal: `ufw.service=active`, `nftables.service=inactive`, `iptables.service=inactive`; UFW's peer accept counter rose from `1` to `3` while the scoped UDP 6902 drop counter stayed `0`. This proves firewall-path acceptance, not application delivery.
 - The installed remote ELF was stale relative to the current control loop: its mtime was `16:44:50 +0800`, while `b0d17cb` wiring the control plane into the UDP loop was committed at `17:15:04 +0800`. The Ack timeout is therefore recorded as a deployment freshness limitation; no rebuild/restart was performed.
