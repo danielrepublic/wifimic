@@ -1,0 +1,19 @@
+Task 2 failure-path verification
+Working directory: C:\Users\Daniel\Documents\opencode\wifimic
+Throwaway directory: C:\Users\Daniel\AppData\Local\Temp\wifimic-cargo-failure-check
+
+The root manifest was copied into the throwaway directory. The four referenced member directories were copied there only so Cargo could reach the deliberately added missing member. The copied members list was changed only by adding `crates/does_not_exist`.
+
+Exact command output:
+REAL_MANIFEST_SHA256_BEFORE=B979DC3ECE925EA74E91FAAAF73EB8CAEB8F624F160E20C763B155132141F1B9
+THROWAWAY_MANIFEST=C:\Users\Daniel\AppData\Local\Temp\wifimic-cargo-failure-check\Cargo.toml
+=== cargo metadata --no-deps --manifest-path C:\Users\Daniel\AppData\Local\Temp\wifimic-cargo-failure-check\Cargo.toml ===
+error: failed to load manifest for workspace member `C:\Users\Daniel\AppData\Local\Temp\wifimic-cargo-failure-check\crates/does_not_exist`
+referenced by workspace at `C:\Users\Daniel\AppData\Local\Temp\wifimic-cargo-failure-check\Cargo.toml`
+
+Caused by:
+  failed to read `C:\Users\Daniel\AppData\Local\Temp\wifimic-cargo-failure-check\crates\does_not_exist\Cargo.toml`
+
+  系統找不到指定的路徑。 (os error 3)
+FAILURE_METADATA_EXIT_CODE=101
+REAL_MANIFEST_SHA256_AFTER=B979DC3ECE925EA74E91FAAAF73EB8CAEB8F624F160E20C763B155132141F1B9

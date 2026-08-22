@@ -1,0 +1,15 @@
+[workspace]
+members = [
+    "crates/wifimic_protocol",
+    "crates/wifimic_diagnostics",
+    "apps/wifimic_server",
+    "apps/wifimic_client",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.97.1"
+
+[workspace.lints.clippy]
+all = "deny"
