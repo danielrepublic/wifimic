@@ -17,3 +17,9 @@ Out-of-scope workspace gate limitations preserved:
 
 Cleanup:
 - No real or fake child process remains; the ignored hardware smoke was not started.
+
+Refactor verification limitations
+----------------------------------
+- `cargo clippy --workspace --all-targets -- -D warnings` remains blocked by the unrelated pre-existing `apps/wifimic_client/src/jitter/buffer.rs` unused `HALF_SEQUENCE_RANGE` import.
+- `cargo fmt --all -- --check` remains blocked by the unrelated client formatting difference; the server package formatter passes.
+- Rust LSP diagnostics timed out on all four changed server files; Cargo build, focused tests, and server Clippy are authoritative for this Rust-only extraction.

@@ -27,3 +27,12 @@ Behavior covered by the passing capture suite:
 
 Cleanup:
 - Unit tests use in-memory process/reader seams only; no fake child process remains.
+
+Capture facade refactor verification
+-------------------------------------
+- `cargo test -p wifimic_server capture -- --nocapture`: passed; 7 passed, 1 ignored.
+- `cargo clippy -p wifimic_server --all-targets -- -D warnings`: passed.
+- `cargo build --workspace`: passed after the extraction; workspace clippy remains blocked only by the unrelated client import below.
+- `cargo fmt -p wifimic_server`: passed; repository rustfmt still reports the pre-existing client formatting difference when run workspace-wide.
+- Pure LOC: `capture.rs` 102, `capture_types.rs` 88, `capture_reader.rs` 39, `capture_process.rs` 114; all are below the 250-LOC ceiling.
+- The public `capture` facade still exports `CaptureHandle`, `CapturedFrame`, `CaptureError`, `PcmFrame`, `PINNED_CAPTURE_SOURCE`, and `PAREC_ARGUMENTS`; private types, frame reading, and process lifecycle are split behind module seams.
