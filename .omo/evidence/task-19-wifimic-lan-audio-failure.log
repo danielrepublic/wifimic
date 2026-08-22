@@ -1,0 +1,62 @@
+# Task 19 failure-path and limitation evidence
+# Captured 2026-08-22.
+
+## Live accepted-peer attempt
+
+Command:
+    cargo test -p wifimic_server --test lan_audio_acceptance -- --ignored --nocapture
+
+Observed preflight:
+    firewall_backend=ufw.service state=active
+    firewall_backend=nftables.service state=inactive
+    firewall_backend=iptables.service state=inactive
+    UFW peer allow: 6902/udp ALLOW IN 192.168.0.200
+    UFW scoped drop: 6902/udp DENY IN Anywhere
+    peer counter before packet: packets 1 bytes 38 accept
+    scoped drop before packet: packets 0 bytes 0 drop
+
+Observed failure:
+    approved peer UDP receive ended with Windows error 10060 after the test's 5-second
+    read timeout; no Ack was observed. The test failed at:
+    `approved peer must receive live Ack: Os { code: 10060, kind: TimedOut, ... }`
+
+This is not claimed as a pass. The datagram was nevertheless evidenced independently at the
+host firewall: after the attempt the literal UFW nft chain reported:
+    ip saddr 192.168.0.200 udp dport 6902 counter packets 3 bytes 114 accept
+    udp dport 6902 counter packets 0 bytes 0 drop
+The local Windows address and route were also literal: `192.168.0.200` is preferred on Wi-Fi
+ifIndex 5 with a `/24`, and `192.168.0.0/24` is directly connected to `192.168.0.210`.
+
+## Root-cause limitation observed without mutating the host
+
+Read-only remote service state showed:
+    active (running), MainPID=33601
+    ExecStart=/home/daniel/.local/bin/wifimic_server
+    UDP 0.0.0.0:6902 owned by wifimic_server PID 33601
+
+Read-only timestamps showed the current local control-loop commit `b0d17cb` at `17:15:04
++0800`, while the active remote ELF was `/home/daniel/.local/bin/wifimic_server` with mtime
+`2026-08-22 16:44:50 +0800`. The active listener is therefore a stale deployment predating the
+current real control-plane loop. The remote `strings` probe produced no application markers
+for `6902`, `parec`, `session`, `control`, or `capture`. No remote rebuild, install, restart,
+firewall mutation, or service-state change was performed because the task forbids making the
+live scenario pass by changing deployment state.
+
+## Third-source fallback
+
+No third reachable LAN source was available. No third-source packet, fake source, synthetic
+counter, fake Ack, or fabricated SessionStarted journal entry was used. The required fallback
+was the existing Todo 7 unit test:
+    cargo test -p wifimic_server network_drops_datagram_from_unapproved_source
+    PASS — 1 passed, 0 failed.
+
+The separate application fallback also passed:
+    cargo test -p wifimic_server control_start_wire_emits_session_started_and_ack -- --nocapture
+    PASS — 1 passed, 0 failed.
+
+## Cleanup receipt
+
+The ignored test's RAII guard sent a best-effort Stop after the Ack timeout. Local post-checks
+reported `local_udp_6902=0` and `local_wifimic_server_processes=0`. The remote service stayed
+active, UFW stayed active, nftables and iptables stayed inactive, and no temporary rules,
+listeners, child processes, or SSH staging files remained.
