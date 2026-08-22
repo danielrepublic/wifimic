@@ -4,14 +4,14 @@ use wifimic_diagnostics::{
     ControlMessageKind, ControlRejectionReason, Event, EventContext, SessionStopReason,
 };
 use wifimic_protocol::{
-    decode_control, encode_control, AudioFrame, ControlMessage, SessionOrder, HEARTBEAT_TAG,
-    START_TAG, STOP_TAG,
+    decode_control, encode_control, ControlMessage, SessionOrder, HEARTBEAT_TAG, START_TAG,
+    STOP_TAG,
 };
 
 #[path = "control_support.rs"]
 mod support;
 
-use support::{capture_error_class, elapsed_millis, retry_deadline};
+use support::{elapsed_millis, retry_deadline};
 pub use support::{CaptureController, ControlError, ControlState};
 
 /// The only two timers owned by the server control plane.
@@ -124,21 +124,6 @@ where
         Ok(())
     }
 
-    /// Acquires one frame from the pinned source for the active session.
-    pub fn next_audio_frame(&mut self, sequence: u32) -> Result<Option<AudioFrame>, ControlError> {
-        let Some(session_id) = self.last_active_session_id else {
-            return Ok(None);
-        };
-        if self.state != ControlState::Streaming {
-            return Ok(None);
-        }
-        let captured = self
-            .capture
-            .read_frame()
-            .map_err(ControlError::CaptureRead)?;
-        Ok(Some(AudioFrame::new(session_id, sequence, captured.pcm)))
-    }
-
     fn handle_message_without_advance(
         &mut self,
         message: ControlMessage,
@@ -248,28 +233,6 @@ where
             session_id,
             acked_kind: STOP_TAG,
         }))
-    }
-
-    fn try_start(&mut self, now: Instant) {
-        match self.capture.start() {
-            Ok(()) => {
-                self.state = ControlState::Streaming;
-                self.next_retry_at = None;
-                self.retry_attempt = 0;
-            }
-            Err(error) => {
-                self.retry_attempt = self.retry_attempt.saturating_add(1);
-                self.diagnostics.emit(
-                    now,
-                    Event::CaptureRetry {
-                        attempt: self.retry_attempt,
-                        error_kind: capture_error_class(&error),
-                        retry_delay_ms: elapsed_millis(CAPTURE_RETRY_INTERVAL),
-                    },
-                );
-                self.next_retry_at = Some(retry_deadline(now, CAPTURE_RETRY_INTERVAL));
-            }
-        }
     }
 
     fn stop_and_idle(

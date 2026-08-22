@@ -7,11 +7,14 @@ use wifimic_protocol::{decode_control, encode_control, ControlMessage};
 use crate::capture::{CaptureError, CapturedFrame};
 use crate::control::{CaptureController, ControlPlane};
 
+const NO_CAPTURE_BYTES_READ: usize = 0;
+
 #[derive(Debug, Default)]
 pub(super) struct FakeCaptureState {
     pub(super) starts: usize,
     pub(super) stops: usize,
     pub(super) start_results: Vec<bool>,
+    pub(super) read_results: Vec<bool>,
 }
 
 #[derive(Clone, Debug)]
@@ -20,9 +23,13 @@ pub(super) struct FakeCapture {
 }
 
 impl FakeCapture {
-    pub(super) fn new(start_results: Vec<bool>) -> (Self, Arc<Mutex<FakeCaptureState>>) {
+    pub(super) fn new_with_read_results(
+        start_results: Vec<bool>,
+        read_results: Vec<bool>,
+    ) -> (Self, Arc<Mutex<FakeCaptureState>>) {
         let state = Arc::new(Mutex::new(FakeCaptureState {
             start_results,
+            read_results,
             ..FakeCaptureState::default()
         }));
         (
@@ -78,6 +85,22 @@ impl CaptureController for FakeCapture {
     }
 
     fn read_frame(&mut self) -> Result<CapturedFrame, CaptureError> {
+        let mut state = self
+            .state
+            .lock()
+            .expect("fake capture state is not poisoned");
+        if !state.read_results.first().copied().unwrap_or(true) {
+            state.read_results.remove(0);
+            return Err(CaptureError::StdoutClosed {
+                bytes_read: NO_CAPTURE_BYTES_READ,
+                exit_code: None,
+                stderr: "fake read failure".to_owned(),
+            });
+        }
+        if !state.read_results.is_empty() {
+            state.read_results.remove(0);
+        }
+        drop(state);
         Ok(CapturedFrame {
             pcm: [0; wifimic_protocol::PCM_PAYLOAD_BYTES],
             acquired_at: Instant::now(),
@@ -93,7 +116,19 @@ pub(super) fn plane(
     EventCollector,
     Instant,
 ) {
-    let (capture, state) = FakeCapture::new(start_results);
+    plane_with_read_results(start_results, Vec::new())
+}
+
+pub(super) fn plane_with_read_results(
+    start_results: Vec<bool>,
+    read_results: Vec<bool>,
+) -> (
+    ControlPlane<FakeCapture>,
+    Arc<Mutex<FakeCaptureState>>,
+    EventCollector,
+    Instant,
+) {
+    let (capture, state) = FakeCapture::new_with_read_results(start_results, read_results);
     let origin = Instant::now();
     let collector = EventCollector::new();
     let diagnostics = EventContext::new(origin, collector.clone());

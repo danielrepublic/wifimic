@@ -1,10 +1,12 @@
 use std::fmt;
 use std::time::{Duration, Instant};
 
-use wifimic_diagnostics::ErrorClass;
-use wifimic_protocol::ProtocolError;
+use wifimic_diagnostics::{ErrorClass, Event};
+use wifimic_protocol::{AudioFrame, ProtocolError};
 
 use crate::capture::{CaptureError, CaptureHandle, CapturedFrame};
+
+use super::{ControlPlane, CAPTURE_RETRY_INTERVAL};
 
 /// The lifecycle of one client-controlled capture session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -88,5 +90,57 @@ pub(crate) fn capture_error_class(error: &CaptureError) -> ErrorClass {
         | CaptureError::NotRunning
         | CaptureError::EndpointNotFound { .. }
         | CaptureError::StdoutClosed { .. } => ErrorClass::Other,
+    }
+}
+
+impl<C> ControlPlane<C>
+where
+    C: CaptureController,
+{
+    /// Acquires one frame from the pinned source for the active session.
+    pub fn next_audio_frame(
+        &mut self,
+        sequence: u32,
+        now: Instant,
+    ) -> Result<Option<AudioFrame>, ControlError> {
+        let Some(session_id) = self.last_active_session_id else {
+            return Ok(None);
+        };
+        if self.state != ControlState::Streaming {
+            return Ok(None);
+        }
+        let captured = match self.capture.read_frame() {
+            Ok(captured) => captured,
+            Err(error) => {
+                self.schedule_capture_retry(now, &error);
+                return Ok(None);
+            }
+        };
+        Ok(Some(AudioFrame::new(session_id, sequence, captured.pcm)))
+    }
+
+    pub(super) fn try_start(&mut self, now: Instant) {
+        match self.capture.start() {
+            Ok(()) => {
+                self.state = ControlState::Streaming;
+                self.next_retry_at = None;
+                self.retry_attempt = 0;
+            }
+            Err(error) => self.schedule_capture_retry(now, &error),
+        }
+    }
+
+    fn schedule_capture_retry(&mut self, now: Instant, error: &CaptureError) {
+        self.state = ControlState::Starting;
+        self.retry_attempt = self.retry_attempt.saturating_add(1);
+        self.diagnostics.emit(
+            now,
+            Event::CaptureRetry {
+                attempt: self.retry_attempt,
+                error_kind: capture_error_class(error),
+                retry_delay_ms: elapsed_millis(CAPTURE_RETRY_INTERVAL),
+            },
+        );
+        self.next_retry_at = Some(retry_deadline(now, CAPTURE_RETRY_INTERVAL));
     }
 }

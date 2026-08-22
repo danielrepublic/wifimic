@@ -5,6 +5,8 @@ use wifimic_protocol::ControlMessage;
 
 use super::{ControlState, CAPTURE_RETRY_INTERVAL, HEARTBEAT_TIMEOUT};
 
+#[path = "control_capture_retry_tests.rs"]
+mod capture_retry_tests;
 #[path = "control_test_support.rs"]
 mod support;
 

@@ -18,6 +18,9 @@ use crate::control::{ControlError, ControlPlane};
 const RECEIVE_POLL_INTERVAL: Duration = Duration::from_millis(1);
 
 fn main() -> std::io::Result<()> {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+        .try_init()
+        .map_err(io::Error::other)?;
     if std::env::args().any(|argument| argument == "--calibrate") {
         eprintln!("calibration responder enabled");
     }
@@ -76,8 +79,9 @@ fn main() -> std::io::Result<()> {
         }
         control.advance(Instant::now()).map_err(io::Error::other)?;
         if let Some(destination) = peer {
+            let now = Instant::now();
             if let Some(frame) = control
-                .next_audio_frame(sequence)
+                .next_audio_frame(sequence, now)
                 .map_err(io::Error::other)?
             {
                 socket.send_to(&encode_audio_frame(&frame), destination)?;
