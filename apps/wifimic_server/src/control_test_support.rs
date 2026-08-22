@@ -104,6 +104,7 @@ impl CaptureController for FakeCapture {
         Ok(CapturedFrame {
             pcm: [0; wifimic_protocol::PCM_PAYLOAD_BYTES],
             acquired_at: Instant::now(),
+            acquired_at_unix_us: 0,
         })
     }
 }

@@ -134,13 +134,20 @@ impl io::Read for ChunkedReader {
 
 pub(super) struct SequenceClock {
     values: Mutex<VecDeque<Instant>>,
+    unix_micros: u64,
 }
 
 impl SequenceClock {
     pub(super) fn new(values: VecDeque<Instant>) -> Self {
         Self {
             values: Mutex::new(values),
+            unix_micros: 0,
         }
+    }
+
+    pub(super) fn with_unix_micros(mut self, unix_micros: u64) -> Self {
+        self.unix_micros = unix_micros;
+        self
     }
 }
 
@@ -151,6 +158,10 @@ impl CaptureClock for SequenceClock {
             .expect("test clock mutex must not be poisoned")
             .pop_front()
             .unwrap_or_else(Instant::now)
+    }
+
+    fn unix_micros(&self) -> u64 {
+        self.unix_micros
     }
 }
 

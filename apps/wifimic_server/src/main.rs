@@ -15,7 +15,7 @@ use wifimic_protocol::{
 
 use crate::capture::CaptureHandle;
 use crate::control::{CaptureController, ControlError, ControlPlane};
-use crate::diagnostic_capture::SyntheticCapture;
+use crate::diagnostic_capture::LatencyDiagnosticCapture;
 
 const RECEIVE_POLL_INTERVAL: Duration = Duration::from_millis(1);
 
@@ -27,8 +27,8 @@ fn main() -> std::io::Result<()> {
         eprintln!("calibration responder enabled");
     }
     if std::env::args().any(|argument| argument == "--diagnose-latency") {
-        eprintln!("latency diagnostic capture enabled");
-        return run_server(SyntheticCapture::new());
+        eprintln!("latency diagnostic capture enabled on the pinned parec source");
+        return run_server(LatencyDiagnosticCapture::new());
     }
     run_server(CaptureHandle::new())
 }

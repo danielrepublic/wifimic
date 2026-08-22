@@ -99,6 +99,28 @@ fn acquisition_timestamps_are_attached_and_monotonic_without_sleeping() {
 }
 
 #[test]
+fn capture_frame_keeps_unix_timestamp_from_the_read_boundary() {
+    // Given: one complete stdout frame and a clock with a known wall-clock value.
+    let frame = [0x55_u8; PCM_PAYLOAD_BYTES];
+    let launcher = TestLauncher::new(
+        Arc::new(AtomicUsize::new(0)),
+        FakeProcess::from_reader(
+            ChunkedReader::new(frame.to_vec(), [PCM_PAYLOAD_BYTES]),
+            ProcessExit::success(),
+        ),
+    );
+    let clock = SequenceClock::new(Vec::new().into()).with_unix_micros(1_234_567);
+    let mut handle = test_handle(launcher, Box::new(clock));
+
+    // When: the real capture facade produces one complete frame from stdout.
+    handle.start().expect("fake capture must start");
+    let captured = handle.read_frame().expect("frame must be complete");
+
+    // Then: the diagnostic timestamp is the injected acquisition-boundary time.
+    assert_eq!(captured.acquired_at_unix_us, 1_234_567);
+}
+
+#[test]
 fn stop_terminates_the_process_and_is_idempotent() {
     // Given: a started fake capture process with an observable stop signal.
     let stopped = Arc::new(AtomicBool::new(false));

@@ -26,6 +26,8 @@ pub struct CapturedFrame {
     pub pcm: PcmFrame,
     /// Monotonic acquisition timestamp for this frame.
     pub acquired_at: std::time::Instant,
+    /// Unix-microsecond acquisition timestamp for diagnostic correlation.
+    pub acquired_at_unix_us: u64,
 }
 
 /// Failure from the pinned `parec` process or its stdout lifecycle.

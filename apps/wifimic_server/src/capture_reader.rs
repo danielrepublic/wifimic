@@ -1,10 +1,14 @@
-use std::{io, time::Instant};
+use std::{
+    io,
+    time::{Instant, SystemTime, UNIX_EPOCH},
+};
 
 use super::{CaptureProcess, PcmFrame};
 use wifimic_protocol::PCM_PAYLOAD_BYTES;
 
 pub(crate) trait CaptureClock {
     fn now(&self) -> Instant;
+    fn unix_micros(&self) -> u64;
 }
 
 pub(crate) struct SystemClock;
@@ -12,6 +16,14 @@ pub(crate) struct SystemClock;
 impl CaptureClock for SystemClock {
     fn now(&self) -> Instant {
         Instant::now()
+    }
+
+    fn unix_micros(&self) -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |duration| {
+                u64::try_from(duration.as_micros()).unwrap_or(u64::MAX)
+            })
     }
 }
 

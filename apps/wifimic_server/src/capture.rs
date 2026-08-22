@@ -66,16 +66,24 @@ impl CaptureHandle {
         let Some(process) = self.process.as_mut() else {
             return Err(CaptureError::NotRunning);
         };
+        // `read_one_frame` returns only after the exact 480-byte frame has
+        // been produced by parec. These timestamps therefore describe the
+        // capture boundary, before ControlPlane or UDP processing begins.
         let outcome = read_one_frame(process.as_mut());
 
         match outcome {
             Ok(pcm) => {
                 let observed_at = self.clock.now();
+                let acquired_at_unix_us = self.clock.unix_micros();
                 let acquired_at = self
                     .last_acquired_at
                     .map_or(observed_at, |previous| previous.max(observed_at));
                 self.last_acquired_at = Some(acquired_at);
-                Ok(CapturedFrame { pcm, acquired_at })
+                Ok(CapturedFrame {
+                    pcm,
+                    acquired_at,
+                    acquired_at_unix_us,
+                })
             }
             Err(FrameReadError::Eof { bytes_read }) => {
                 let Some(mut process) = self.process.take() else {
