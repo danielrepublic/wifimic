@@ -124,3 +124,7 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 
 - Task 17's Windows updater validates the explicit revision and clean checkout before fetching, builds a detached worktree candidate before disabling the canonical interactive task, and uses same-volume temporary-file replacement for the installed executable.
 - The injected PowerShell 5.1 matrix deterministically covered pre-build, build, task stop/start, health, task-registration, and interrupted-swap failures; every recoverable failure restored the prior hash and task XML, re-enabled/restarted the task, and removed staging/transaction state.
+
+## 2026-08-22
+
+- Task 17 verification found that resolving before fetching rejected a valid remote-only explicit revision. The fake operation now withholds its revision until `FetchTags`, locking the required `GetSourceStatus, FetchTags, ResolveRevision` order while preserving bounded failure cleanup.

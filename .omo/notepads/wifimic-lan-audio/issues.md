@@ -42,3 +42,7 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 ## 2026-08-22
 
 - Task 17's live updater run was intentionally not attempted. Read-only inspection found the exact VB-CABLE Input endpoint but no canonical `\wifimic\wifimic-client` task; no Program Files, Scheduled Task, process, or firewall mutation was authorized.
+
+## 2026-08-22
+
+- Task 17 had a real ordering defect: `ResolveRevision` ran before `FetchTags`, so a valid remote-only tag could not be resolved. The updater now keeps dirty-checkout rejection first, fetches within the bounded native operation, then resolves exactly one commit; no live update was attempted.

@@ -34,3 +34,7 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 ## 2026-08-22
 
 - No unresolved Task 17 implementation blocker remains. Native Windows task/binary mutation was not exercised because the canonical task is absent and host acceptance was not supplied; PowerShell parse plus the deterministic injected-operation rollback matrix are authoritative for this checkout.
+
+## 2026-08-22
+
+- The Task 17 remote-only revision defect is resolved and locked by a fake ref-availability gate plus fetch-failure receipt. Native Scheduled Task/update/audio behavior remains unclaimed because the canonical task is absent and host mutation was not accepted.

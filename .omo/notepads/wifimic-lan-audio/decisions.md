@@ -49,3 +49,7 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 
 - Task 17 keeps the installer isolated and changes no firewall state. It pins the canonical `C:\Program Files\wifimic-client\wifimic_client.exe` and `\wifimic\wifimic-client` identities, validates the exact VB-CABLE Input endpoint, and requires `-AcceptHostMutation` for native task/file operations.
 - Revision resolution is performed after the clean-checkout gate and before tag fetching; the resolved commit, detached worktree, prior executable bytes/hash, prior task XML/enabled state, and cleanup roots belong to one rollback transaction.
+
+## 2026-08-22
+
+- Task 17 correction: the clean checkout gate remains before any fetch, then bounded `FetchTags` runs before `ResolveRevision`; only the resulting single commit is admitted to detached staging. The explicit revision validation and shell-safe argument boundary remain unchanged.
