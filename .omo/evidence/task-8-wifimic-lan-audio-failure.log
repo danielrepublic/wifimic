@@ -1,0 +1,30 @@
+# Task 8 failure-path and cleanup evidence
+# Captured 2026-08-22T08:10Z.
+
+## Third-source fallback
+
+No third reachable LAN address was available for an agent-executed UDP packet. This limitation is recorded rather than fabricating a source address. The selected firewall path has an explicit `DENY IN Anywhere` rule for UDP 6902, and its drop counter remained at zero because no third-source packet was sent; the peer accept counter was tested separately and incremented once.
+
+## Service failure probe
+
+Command:
+    ssh arch-daniel "systemctl --user start wifimic-server; sleep 1; systemctl --user is-active wifimic-server; systemctl --user status wifimic-server --no-pager"
+
+Result:
+    Active: activating (auto-restart) (Result: exit-code)
+    ExecStart=/home/daniel/.local/bin/wifimic_server (code=exited, status=203/EXEC)
+    The missing later-task binary prevented a sustained active service. The service was stopped and reset-failed after this probe.
+
+## Cleanup receipt
+
+Command:
+    ssh arch-daniel "find /tmp -maxdepth 1 -type f -name 'wifimic-server.*'; systemctl --user is-active wifimic-server; systemctl is-active iptables.service; systemctl is-active nftables.service; systemctl is-active ufw.service"
+
+Result:
+    temp-staging=absent
+    service-state=inactive
+    iptables-state=inactive
+    nftables-state=inactive
+    ufw-state=active
+
+No temporary firewall rules, test services, test packets, or extra firewall backend were left behind. The intended UFW allow/deny rules and user unit remain installed.
