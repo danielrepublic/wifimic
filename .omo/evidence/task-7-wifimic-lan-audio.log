@@ -1,0 +1,31 @@
+# Task 7 happy-path evidence
+# Captured: 2026-08-22T16:09:53.1634831+08:00
+
+Command: cargo test -p wifimic_server network_accepts_approved_peer
+Result: PASS
+Output:
+    running 1 test
+    test network::tests::network_accepts_approved_peer ... ok
+    test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out
+
+Command: cargo test -p wifimic_server network
+Result: PASS
+Output:
+    running 3 tests
+    test network::tests::network_rejects_ipv6_and_other_ipv4_sources ... ok
+    test network::tests::network_accepts_approved_peer ... ok
+    test network::tests::network_drops_datagram_from_unapproved_source ... ok
+    test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+Command: cargo build --workspace
+Result: PASS
+Output:
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.62s
+
+Command: cargo clippy --workspace --all-targets -- -D warnings
+Result: PASS
+Output:
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.36s
+
+Socket cleanup: the rejection integration test used only ephemeral IPv4 sockets; both test processes exited and no listener was left running. The fixed 6902 bind is exercised only by production startup code, never by parallel tests.
+LSP note: Rust LSP diagnostics timed out twice; cargo compiler, tests, build, and Clippy were authoritative per inherited project guidance.

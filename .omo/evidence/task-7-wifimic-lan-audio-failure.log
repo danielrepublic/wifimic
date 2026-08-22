@@ -1,0 +1,12 @@
+# Task 7 failure/adversarial probe evidence
+# Captured: 2026-08-22T16:09:53.1634831+08:00
+
+Command: cargo test -p wifimic_server network_drops_datagram_from_unapproved_source
+Result: PASS
+Output:
+    running 1 test
+    test network::tests::network_drops_datagram_from_unapproved_source ... ok
+    test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out
+
+Probe coverage: an ephemeral sender on 127.0.0.1 sent one control-tagged and one audio-tagged datagram. Both source IPs were rejected before forwarding, and both receive calls returned `None`. Pure predicate tests separately reject `192.168.0.201` and IPv6 while accepting `192.168.0.200` on two different source ports.
+Cleanup: the ephemeral sender and receiver were owned by the test and dropped at test exit; no live 6902 listener was created.
