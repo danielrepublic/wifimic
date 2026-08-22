@@ -1,0 +1,80 @@
+# Task 3 malformed-input and stale-state evidence
+# Timestamp: 2026-08-22T07:35:44.8208649Z
+
+## cargo test -p wifimic_protocol -- --nocapture
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+     Running unittests src\lib.rs (target\debug\deps\wifimic_protocol-57f77f39bde4d3f1.exe)
+     Running tests\wire_contract.rs (target\debug\deps\wire_contract-9200e1b4ecf87811.exe)
+   Doc-tests wifimic_protocol
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 11 tests
+test audio_decode_rejects_invalid_version_tag_and_length ... ok
+test session_ordering_rejects_replayed_or_stale_session_id ... ok
+test control_decode_rejects_truncated_invalid_tag_and_invalid_length ... ok
+test decode_rejects_truncated_payload ... ok
+test pcm_payload_bytes_matches_frame_duration_and_sample_format ... ok
+test ack_control_layout_appends_the_acknowledged_control_tag ... ok
+test start_control_layout_is_tag_version_then_big_endian_session ... ok
+test audio_round_trip_uses_documented_big_endian_header ... ok
+test wrapping_sequence_classification_is_reusable ... ok
+test control_messages_round_trip_for_each_kind ... ok
+test session_id_generator_is_strictly_increasing_across_clock_edges ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+## cargo test -p wifimic_protocol decode_rejects_truncated_payload
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\wifimic_protocol-57f77f39bde4d3f1.exe)
+     Running tests\wire_contract.rs (target\debug\deps\wire_contract-9200e1b4ecf87811.exe)
+
+running 1 test
+test decode_rejects_truncated_payload ... ok
+
+test result: ok. 1 passed; 0 failed; 10 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+## cargo test -p wifimic_protocol session_ordering_rejects_replayed_or_stale_session_id
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\wifimic_protocol-57f77f39bde4d3f1.exe)
+     Running tests\wire_contract.rs (target\debug\deps\wire_contract-9200e1b4ecf87811.exe)
+
+running 1 test
+test session_ordering_rejects_replayed_or_stale_session_id ... ok
+
+test result: ok. 1 passed; 0 failed; 10 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+Result: PASS. Truncated audio, invalid tag/version/length, and replayed/stale sessions were
+rejected through typed results without a panic or silent acceptance. No services, sockets, or
+temporary runtime artifacts were created.
