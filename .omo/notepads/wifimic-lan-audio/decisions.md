@@ -20,3 +20,13 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 ## 2026-08-22
 
 - The production loop gives the UDP socket a bounded 100 ms read timeout so `ControlPlane::advance` can enforce liveness and retry timers without a separate timer thread; the control module itself owns only the named 30-second and 5-second intervals.
+
+## 2026-08-22
+
+- The updater does not change firewall, capture, or service-unit configuration during a successful update. It snapshots the existing user unit only so an interrupted or failed transaction can restore the exact prior config atomically before restarting `wifimic-server`.
+- The default smoke uses the real fixed wire constants (version 1; Start `0x01`, Heartbeat `0x02`, Stop `0x03`, Ack `0x04`) and supports an explicit helper for a peer-originated probe when the server's source-IP gate makes a local probe impossible.
+
+## 2026-08-22
+
+- Client reachability is a typed transition: Start Ack establishes the pending ID, matching Heartbeat Acks reset the missed counter, and two missed Heartbeat Acks enter Unreachable. A retry always mints a new ID with the shared monotonic generator; no rejected or unacknowledged ID is reused.
+- The client trusts exactly IPv4 `192.168.0.210` for inbound Ack and audio datagrams, while accepting any source port from that IP. Filtering occurs before protocol state or jitter/render mutation.

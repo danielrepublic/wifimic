@@ -86,3 +86,20 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 - `Test-NetConnection` is TCP-only on Windows PowerShell; UDP probes need a .NET `UdpClient` snippet, with Linux-side firewall counters as the authoritative delivery proof because the server discards datagrams silently.
 - Git Bash at `C:\Program Files\Git\bin\bash.exe` provides working `bash -n` syntax checks on this Windows host even though WSL is unavailable; both deploy scripts passed with exit 0.
 - UFW example output should avoid hard-coded rule numbers: the allow is inserted at priority 1 but the deny is appended, so numbering shifts with pre-existing rules.
+
+## 2026-08-22
+
+- The Windows client control plane is clearest as a small public facade plus separate state-transition logic and UDP support modules: `control.rs` remains under the 250 pure-LOC ceiling while its public state, transport, jitter, and renderer seams stay stable.
+- Deterministic fake transport and renderer tests decode the actual control bytes, inject both `Instant` and epoch-millisecond clocks, and prove that accepted Start Acks—not local UDP send success—authorize Heartbeats and audio delivery.
+
+## 2026-08-22
+
+- Todo 19's ignored harness keeps the live network/firewall scenario separate from the application fallback: it sends real protocol Start bytes from a socket bound to `192.168.0.200`, validates a real Ack when available, and independently inspects the active firewall backend before and after traffic. A Drop guard sends Stop on panic/timeout so a failed live probe does not intentionally leave a session active.
+- The live host preflight was literal: `ufw.service=active`, `nftables.service=inactive`, `iptables.service=inactive`; UFW's peer accept counter rose from `1` to `3` while the scoped UDP 6902 drop counter stayed `0`. This proves firewall-path acceptance, not application delivery.
+- The installed remote ELF was stale relative to the current control loop: its mtime was `16:44:50 +0800`, while `b0d17cb` wiring the control plane into the UDP loop was committed at `17:15:04 +0800`. The Ack timeout is therefore recorded as a deployment freshness limitation; no rebuild/restart was performed.
+
+## 2026-08-22
+
+- Task 16's updater keeps the source checkout read-only: it accepts exactly one tag or hexadecimal commit, rejects dirty status before fetching/building, stages with `git worktree add --detach`, and bounds fetch, build, systemd, and smoke operations with `timeout`.
+- The transaction copies the prior binary, user unit, hashes, and `file` metadata into a private transaction directory before stopping the user service; the candidate is installed with same-directory copy-plus-`mv`, and the EXIT trap restores the binary/unit and proves `systemctl --user is-active` after rollback.
+- A complete smoke is stronger than a successful send: the built-in UDP probe checks exact Start, Heartbeat, and Stop Acks, while an injected helper must emit `wifimic-control-smoke: PASS`; the local harness covered good update, deliberate bad-tag health rollback, build failure, invalid tag, prior hash, active service, and staging cleanup.
