@@ -71,3 +71,11 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 - The jitter buffer's public facade can remain stable while `types.rs`, `buffer.rs`, and `adaptation.rs` own playout data, sequence-aware queue behavior, and target adaptation respectively; private `pub(super)` seams preserve the existing API without widening implementation visibility.
 - Refactor measurements are 17 pure LOC for `jitter.rs`, 168 for `jitter/buffer.rs`, 86 for `jitter/types.rs`, 108 for `jitter/adaptation.rs`, and 231 for the unchanged property/scenario tests.
 - The previously reported two logging rotation failures did not reproduce during the post-refactor workspace test; no logging code was changed and no issue entry is required.
+
+## 2026-08-22T09:07:49Z
+
+- Task 9 guide writing: every command in `docs/deployment-linux.md` was cross-checked against the real artifacts — unit `ExecStart=%h/.local/bin/wifimic_server`, firewall selector branches, pinned source from `capture_types.rs`, peer/port from `network.rs` — so no doc-only values were invented.
+- A prohibition note can itself leak a forbidden string: the first draft mentioned `/home/daniel/.psw` inside a "do not include this" sentence and the grep gate caught it. Forbidden-string checks must run against the final text, not intent.
+- `Test-NetConnection` is TCP-only on Windows PowerShell; UDP probes need a .NET `UdpClient` snippet, with Linux-side firewall counters as the authoritative delivery proof because the server discards datagrams silently.
+- Git Bash at `C:\Program Files\Git\bin\bash.exe` provides working `bash -n` syntax checks on this Windows host even though WSL is unavailable; both deploy scripts passed with exit 0.
+- UFW example output should avoid hard-coded rule numbers: the allow is inserted at priority 1 but the deny is appended, so numbering shifts with pre-existing rules.
