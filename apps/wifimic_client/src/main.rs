@@ -42,6 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 const CALIBRATION_PROBE_COUNT: u32 = 4;
+const MAX_ROUND_TRIP_RETRY_ATTEMPTS: u32 = 10;
 const CALIBRATION_READ_TIMEOUT: Duration = Duration::from_secs(1);
 #[cfg(target_os = "windows")]
 const RECEIVE_POLL_INTERVAL: Duration = Duration::from_millis(1);
@@ -59,13 +60,47 @@ fn run_calibration() -> Result<(), CalibrationCliError> {
 pub(crate) fn calibrate_socket(
     socket: &mut control::UdpClientSocket,
 ) -> Result<wifimic_protocol::latency::CalibrationTracker, CalibrationCliError> {
-    use control::DatagramTransport;
-    use wifimic_protocol::latency::{CalibrationTracker, NtpSample};
-    use wifimic_protocol::{decode_calibration, encode_calibration, CalibrationPacket};
+    calibrate_transport(socket, unix_micros)
+}
+
+fn calibrate_transport<T, C>(
+    socket: &mut T,
+    mut now_micros: C,
+) -> Result<wifimic_protocol::latency::CalibrationTracker, CalibrationCliError>
+where
+    T: control::DatagramTransport,
+    C: FnMut() -> u64,
+{
+    use wifimic_protocol::latency::CalibrationTracker;
 
     let mut tracker = CalibrationTracker::new();
     for sequence in 0..CALIBRATION_PROBE_COUNT {
-        let t1_client_send_us = unix_micros();
+        let result = calibrate_probe(socket, sequence, &mut now_micros)?;
+        let update = tracker.update(result);
+        println!(
+            "calibration sequence={sequence} round_trip_us={} offset_us={} error_bound_us={} instability_warning={}",
+            result.round_trip_us, update.offset_us, update.error_bound_us, update.instability_warning
+        );
+    }
+    Ok(tracker)
+}
+
+fn calibrate_probe<T, C>(
+    socket: &mut T,
+    sequence: u32,
+    now_micros: &mut C,
+) -> Result<wifimic_protocol::latency::CalibrationResult, CalibrationCliError>
+where
+    T: control::DatagramTransport,
+    C: FnMut() -> u64,
+{
+    use wifimic_protocol::latency::{CalibrationError, NtpSample};
+    use wifimic_protocol::{decode_calibration, encode_calibration, CalibrationPacket};
+
+    let mut attempt = 0;
+    loop {
+        attempt += 1;
+        let t1_client_send_us = now_micros();
         socket.send_to_peer(&encode_calibration(CalibrationPacket::Probe {
             sequence,
             t1_client_send_us,
@@ -89,16 +124,24 @@ pub(crate) fn calibrate_socket(
             t1_client_send_us,
             t2_server_receive_us,
             t3_server_send_us,
-            unix_micros(),
+            now_micros(),
         )
-        .calibrate()?;
-        let update = tracker.update(result);
-        println!(
-            "calibration sequence={sequence} round_trip_us={} offset_us={} error_bound_us={} instability_warning={}",
-            result.round_trip_us, update.offset_us, update.error_bound_us, update.instability_warning
-        );
+        .calibrate();
+        match result {
+            Ok(result) => return Ok(result),
+            Err(CalibrationError::RoundTripTooLong { .. })
+                if attempt < MAX_ROUND_TRIP_RETRY_ATTEMPTS =>
+            {
+                continue
+            }
+            Err(error @ CalibrationError::RoundTripTooLong { .. }) => return Err(error.into()),
+            Err(CalibrationError::InvalidTimestampOrder) => {
+                return Err(CalibrationCliError::Calibration(
+                    CalibrationError::InvalidTimestampOrder,
+                ));
+            }
+        }
     }
-    Ok(tracker)
 }
 
 fn unix_micros() -> u64 {
@@ -108,6 +151,10 @@ fn unix_micros() -> u64 {
             u64::try_from(duration.as_micros()).unwrap_or(u64::MAX)
         })
 }
+
+#[cfg(test)]
+#[path = "main_tests.rs"]
+mod tests;
 
 #[cfg(target_os = "windows")]
 fn run_windows_client() -> Result<(), Box<dyn std::error::Error>> {
