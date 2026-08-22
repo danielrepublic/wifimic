@@ -1,0 +1,17 @@
+Task 12 failure-path evidence — 2026-08-22
+
+Commands and results:
+
+    cargo test -p wifimic_client control -- --nocapture
+    RED probe before implementation: failed with Rust E0583 because `apps/wifimic_client/src/control.rs` did not exist. This was the expected missing-control seam, not a runtime failure.
+
+    cargo test -p wifimic_client control_drops_datagram_from_unapproved_source -- --nocapture
+    PASS: the unapproved source was dropped and the client remained Establishing.
+
+    cargo test -p wifimic_client control_malformed_ack_is_typed_and_does_not_change_state -- --nocapture
+    PASS: the truncated Ack returned `ControlError::Protocol` and did not mutate the state.
+
+    Rust LSP diagnostics on the changed client Rust files
+    LIMITATION: the configured Rust LSP daemon timed out after 30 seconds and subsequent file requests timed out. This matches the repository's recorded limitation; Cargo tests, build, formatting, and Clippy were the authoritative gates.
+
+No live firewall, VB-CABLE, Linux host, or real UDP failure claim was made. Hardware tests remained ignored and no raw audio was written to evidence or diagnostics. Deterministic fake resources were dropped at test completion; no cleanup artifact remained.
