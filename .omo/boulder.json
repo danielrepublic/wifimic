@@ -1,0 +1,35 @@
+{
+  "schema_version": 2,
+  "active_work_id": "wifimic-lan-audio-fe11a1d7",
+  "works": {
+    "wifimic-lan-audio-fe11a1d7": {
+      "work_id": "wifimic-lan-audio-fe11a1d7",
+      "active_plan": "C:\\Users\\Daniel\\Documents\\opencode\\wifimic\\.omo\\plans\\wifimic-lan-audio.md",
+      "plan_name": "wifimic-lan-audio",
+      "status": "active",
+      "started_at": "2026-08-22T07:00:29.946Z",
+      "updated_at": "2026-08-22T07:00:29.946Z",
+      "session_ids": [
+        "opencode:ses_fd7baa205ffevkbw7GbF6UxVKD"
+      ],
+      "session_origins": {
+        "opencode:ses_fd7baa205ffevkbw7GbF6UxVKD": "direct"
+      },
+      "agent": "atlas",
+      "task_sessions": {}
+    }
+  },
+  "active_plan": "C:\\Users\\Daniel\\Documents\\opencode\\wifimic\\.omo\\plans\\wifimic-lan-audio.md",
+  "started_at": "2026-08-22T07:00:29.946Z",
+  "status": "active",
+  "updated_at": "2026-08-22T07:00:29.946Z",
+  "session_ids": [
+    "opencode:ses_fd7baa205ffevkbw7GbF6UxVKD"
+  ],
+  "session_origins": {
+    "opencode:ses_fd7baa205ffevkbw7GbF6UxVKD": "direct"
+  },
+  "plan_name": "wifimic-lan-audio",
+  "task_sessions": {},
+  "agent": "atlas"
+}
