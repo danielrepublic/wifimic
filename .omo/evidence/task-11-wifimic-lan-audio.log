@@ -1,0 +1,24 @@
+Task 11 — adaptive jitter buffer happy-path evidence
+Date: 2026-08-22
+
+Command:
+  cargo test -p wifimic_client jitter_grows_under_sustained_loss_and_decays_after_recovery
+
+Result: PASS (exit code 0)
+  jitter_grows_under_sustained_loss_and_decays_after_recovery: 1 passed
+  filtered: 27
+
+Assertions covered:
+  - sustained one-frame gaps grow the target above the 40 ms floor;
+  - 5 ms on-time recovery decays the target back to exactly 40 ms;
+  - target adaptation uses injected arrival times only.
+
+Additional targeted verification:
+  cargo test -p wifimic_client jitter: PASS, 13 jitter tests passed.
+  cargo build --workspace: PASS.
+  cargo clippy --workspace --all-targets -- -D warnings: PASS.
+
+Workspace-wide test note:
+  cargo test --workspace reached all jitter tests successfully but exited 101 because
+  two unrelated pre-existing logging tests failed in apps/wifimic_client/src/logging.rs
+  (expected removals 2/1, observed 3/2). No logging code was changed for Task 11.
