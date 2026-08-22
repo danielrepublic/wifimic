@@ -4,7 +4,24 @@ use std::{
     process::{Child, ChildStderr, ChildStdout, Command, Stdio},
 };
 
-use super::{CaptureError, CaptureLauncher, CaptureProcess, ProcessExit, PINNED_CAPTURE_SOURCE};
+use super::{CaptureError, PINNED_CAPTURE_SOURCE};
+
+pub(crate) trait CaptureLauncher {
+    fn spawn(&self, arguments: &[&str]) -> Result<Box<dyn CaptureProcess>, CaptureError>;
+}
+
+pub(crate) trait CaptureProcess {
+    fn read_stdout(&mut self, buffer: &mut [u8]) -> io::Result<usize>;
+    fn finish_after_eof(&mut self) -> io::Result<ProcessExit>;
+    fn stop(&mut self) -> io::Result<()>;
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ProcessExit {
+    pub(super) success: bool,
+    pub(super) exit_code: Option<i32>,
+    pub(super) stderr: String,
+}
 
 const MAX_STDERR_BYTES: usize = 4_096;
 
