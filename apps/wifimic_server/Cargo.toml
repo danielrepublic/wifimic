@@ -4,5 +4,8 @@ version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 
+[dependencies]
+wifimic_protocol = { path = "../../crates/wifimic_protocol" }
+
 [lints]
 workspace = true

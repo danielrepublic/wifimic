@@ -1,3 +1,4 @@
+pub mod capture;
 mod network;
 
 fn main() -> std::io::Result<()> {
