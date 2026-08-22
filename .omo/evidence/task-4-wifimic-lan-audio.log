@@ -1,0 +1,43 @@
+# Task 4 happy-path evidence
+# Captured: 2026-08-22T07:54:12.4063885Z
+
+Command: cargo test -p wifimic_diagnostics -- --nocapture
+Result: PASS
+Output:
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.02s
+     Running unittests src\lib.rs (target\debug\deps\wifimic_diagnostics-988a482f6292ffb0.exe)
+   Doc-tests wifimic_diagnostics
+
+running 5 tests
+test tests::control_plane_events_are_typed_and_never_format_audio_content ... ok
+test tests::rate_limiter_admits_first_event_and_exact_interval_boundary ... ok
+test tests::zero_interval_admits_events_without_sleeping ... ok
+test tests::rate_limiter_reset_allows_a_new_first_event ... ok
+test tests::heartbeat_timeout_burst_is_bounded_before_reaching_sink ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+running 0 tests
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+Command: cargo clippy -p wifimic_diagnostics -- -D warnings
+Result: PASS
+Output:
+    Checking wifimic_diagnostics v0.1.0 (C:\Users\Daniel\Documents\opencode\wifimic\crates\wifimic_diagnostics)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.25s
+
+Command: cargo build --workspace
+Result: PASS
+Output:
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.10s
+
+Command: cargo doc -p wifimic_diagnostics --no-deps
+Result: PASS
+Output:
+ Documenting wifimic_diagnostics v0.1.0 (C:\Users\Daniel\Documents\opencode\wifimic\crates\wifimic_diagnostics)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.73s
+   Generated C:\Users\Daniel\Documents\opencode\wifimic\target\doc\wifimic_diagnostics\index.html
+
+LSP note: Rust LSP diagnostics timed out; inherited project guidance identifies Rust LSP as unavailable. Cargo test, clippy, build, and doc are the authoritative checks.
+
+Scope check: no protocol, server, or client source files were changed. Event records contain only typed scalar metadata and no PCM/audio payload field.
