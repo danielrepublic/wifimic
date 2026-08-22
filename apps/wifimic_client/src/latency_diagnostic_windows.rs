@@ -5,7 +5,10 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 use wifimic_protocol::{AudioFrame, SAMPLE_RATE_HZ};
 
-use super::{detect_tone_onset, translate_client_timestamp_to_server, CAPTURE_ENDPOINT};
+use super::{
+    detect_tone_onset, translate_client_timestamp_to_server, RenderCorrelation, RenderedSequence,
+    CAPTURE_ENDPOINT,
+};
 
 #[path = "latency_diagnostic_capture.rs"]
 mod capture;
@@ -81,6 +84,11 @@ struct ToneOnset {
     server_onset_us: u64,
 }
 
+struct ToneMeasurementContext {
+    offset_us: i64,
+    baseline_rendered: Option<RenderedSequence>,
+}
+
 pub(super) fn run(duration: Duration) -> Result<(), LatencyDiagnosticError> {
     let mut socket =
         crate::control::UdpClientSocket::bind_at(SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0)))?;
@@ -108,6 +116,7 @@ pub(super) fn run(duration: Duration) -> Result<(), LatencyDiagnosticError> {
 
     let deadline = Instant::now() + duration;
     let mut next_measurement = Instant::now();
+    let mut last_rendered = None;
     let _session_id =
         control
             .accepted_session_id()
@@ -116,9 +125,19 @@ pub(super) fn run(duration: Duration) -> Result<(), LatencyDiagnosticError> {
             })?;
     while Instant::now() < deadline {
         let now = Instant::now();
-        service_control(&mut control, now)?;
+        if let Some(rendered) = service_control(&mut control, now)? {
+            last_rendered = Some(rendered);
+        }
         if now >= next_measurement {
-            let onset = measure_tone(&mut control, &capture, offset_us)?;
+            let onset = measure_tone(
+                &mut control,
+                &capture,
+                ToneMeasurementContext {
+                    offset_us,
+                    baseline_rendered: last_rendered,
+                },
+            )?;
+            last_rendered = None;
             println!(
                 "latency_onset sequence={} client_onset_us={} server_onset_us={} clock_offset_us={offset_us}",
                 onset.sequence, onset.client_onset_us, onset.server_onset_us
@@ -151,7 +170,7 @@ fn wait_for_session(
 fn service_control(
     control: &mut ClientControl,
     now: Instant,
-) -> Result<Option<u32>, LatencyDiagnosticError> {
+) -> Result<Option<RenderedSequence>, LatencyDiagnosticError> {
     match control.receive_once(now) {
         Ok(_) => {}
         Err(crate::control::ControlError::Transport(error))
@@ -164,7 +183,15 @@ fn service_control(
     control.advance(now, epoch_millis())?;
     let render_outcome = control.render_ready(now)?;
     Ok(match render_outcome {
-        crate::control::RenderOutcome::Audio => control.renderer().last_sequence(),
+        crate::control::RenderOutcome::Audio => {
+            control
+                .renderer()
+                .last_sequence()
+                .map(|sequence| RenderedSequence {
+                    sequence,
+                    rendered_at_us: epoch_micros(),
+                })
+        }
         crate::control::RenderOutcome::Gap | crate::control::RenderOutcome::NotReady => None,
     })
 }
@@ -172,23 +199,20 @@ fn service_control(
 fn measure_tone(
     control: &mut ClientControl,
     capture: &CaptureStream,
-    offset_us: i64,
+    context: ToneMeasurementContext,
 ) -> Result<ToneOnset, LatencyDiagnosticError> {
     capture.discard_available()?;
     let mut samples = Vec::new();
     let mut first_capture_us = None;
-    let mut first_rendered_sequence = None;
+    let mut render_correlation = RenderCorrelation::new(context.baseline_rendered);
     let deadline = Instant::now() + TONE_CAPTURE_TIMEOUT;
     loop {
-        first_rendered_sequence =
-            first_rendered_sequence.or(service_control(control, Instant::now())?);
+        render_correlation.observe(service_control(control, Instant::now())?);
         for packet in capture.read_available()? {
             first_capture_us.get_or_insert(packet.acquired_at_us);
             samples.extend(packet.samples);
         }
         if let Some(onset_index) = detect_tone_onset(&samples) {
-            let sequence =
-                first_rendered_sequence.ok_or(LatencyDiagnosticError::NoRenderedToneFrame)?;
             let first_capture_us =
                 first_capture_us.ok_or(LatencyDiagnosticError::MissingToneTimestamp)?;
             let onset_client_us = first_capture_us.saturating_add(
@@ -197,10 +221,16 @@ fn measure_tone(
                     .saturating_mul(TONE_SAMPLE_TIMESTAMP_SCALE)
                     / u64::from(SAMPLE_RATE_HZ),
             );
+            let sequence = render_correlation
+                .sequence_for_onset(onset_client_us)
+                .ok_or(LatencyDiagnosticError::NoRenderedToneFrame)?;
             return Ok(ToneOnset {
                 sequence,
                 client_onset_us: onset_client_us,
-                server_onset_us: translate_client_timestamp_to_server(onset_client_us, offset_us),
+                server_onset_us: translate_client_timestamp_to_server(
+                    onset_client_us,
+                    context.offset_us,
+                ),
             });
         }
         if Instant::now() >= deadline {
@@ -216,6 +246,14 @@ fn epoch_millis() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map_or(0, |duration| {
             u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
+        })
+}
+
+fn epoch_micros() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| {
+            u64::try_from(duration.as_micros()).unwrap_or(u64::MAX)
         })
 }
 

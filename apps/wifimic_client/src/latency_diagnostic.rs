@@ -2,6 +2,7 @@
 #[path = "latency_diagnostic_windows.rs"]
 mod windows_backend;
 
+use std::collections::VecDeque;
 use std::time::Duration;
 
 use thiserror::Error;
@@ -10,6 +11,50 @@ pub(crate) const DEFAULT_DURATION_SECS: u64 = 300;
 pub(crate) const CAPTURE_ENDPOINT: &str = "CABLE Output (VB-Audio Virtual Cable)";
 pub(crate) const TONE_WINDOW_SAMPLES: usize = wifimic_protocol::SAMPLES_PER_FRAME;
 pub(crate) const ONSET_RMS_THRESHOLD: u64 = 1_000;
+
+const MAX_RENDER_CORRELATION_EVENTS: usize = 128;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct RenderedSequence {
+    pub(super) sequence: u32,
+    pub(super) rendered_at_us: u64,
+}
+
+#[derive(Debug)]
+pub(super) struct RenderCorrelation {
+    baseline: Option<RenderedSequence>,
+    rendered: VecDeque<RenderedSequence>,
+}
+
+impl RenderCorrelation {
+    #[must_use]
+    pub(super) fn new(baseline: Option<RenderedSequence>) -> Self {
+        Self {
+            baseline,
+            rendered: VecDeque::with_capacity(MAX_RENDER_CORRELATION_EVENTS),
+        }
+    }
+
+    pub(super) fn observe(&mut self, rendered: Option<RenderedSequence>) {
+        let Some(rendered) = rendered else {
+            return;
+        };
+        if self.rendered.len() == MAX_RENDER_CORRELATION_EVENTS {
+            self.rendered.pop_front();
+        }
+        self.rendered.push_back(rendered);
+    }
+
+    #[must_use]
+    pub(super) fn sequence_for_onset(&self, onset_us: u64) -> Option<u32> {
+        self.rendered
+            .iter()
+            .chain(self.baseline.iter())
+            .filter(|rendered| rendered.rendered_at_us <= onset_us)
+            .max_by_key(|rendered| rendered.rendered_at_us)
+            .map(|rendered| rendered.sequence)
+    }
+}
 
 #[derive(Debug, Error)]
 pub(crate) enum LatencyDiagnosticError {
@@ -86,7 +131,10 @@ pub(crate) fn translate_client_timestamp_to_server(client_us: u64, offset_us: i6
 
 #[cfg(test)]
 mod tests {
-    use super::{detect_tone_onset, translate_client_timestamp_to_server, TONE_WINDOW_SAMPLES};
+    use super::{
+        detect_tone_onset, translate_client_timestamp_to_server, RenderCorrelation,
+        RenderedSequence, TONE_WINDOW_SAMPLES,
+    };
 
     #[test]
     fn onset_detector_returns_none_for_silence() {
@@ -145,5 +193,53 @@ mod tests {
 
         // Then
         assert_eq!(server_timestamp_us, 1_075_000);
+    }
+
+    #[test]
+    fn render_correlation_keeps_render_before_measurement() {
+        // Given
+        let baseline = RenderedSequence {
+            sequence: 41,
+            rendered_at_us: 1_000_000,
+        };
+        let correlation = RenderCorrelation::new(Some(baseline));
+
+        // When
+        let sequence = correlation.sequence_for_onset(1_010_000);
+
+        // Then
+        assert_eq!(sequence, Some(41));
+    }
+
+    #[test]
+    fn render_correlation_ignores_render_after_detected_onset() {
+        // Given
+        let mut correlation = RenderCorrelation::new(None);
+        correlation.observe(Some(RenderedSequence {
+            sequence: 42,
+            rendered_at_us: 2_005_000,
+        }));
+        correlation.observe(Some(RenderedSequence {
+            sequence: 43,
+            rendered_at_us: 2_020_000,
+        }));
+
+        // When
+        let sequence = correlation.sequence_for_onset(2_010_000);
+
+        // Then
+        assert_eq!(sequence, Some(42));
+    }
+
+    #[test]
+    fn render_correlation_reports_missing_render_evidence() {
+        // Given
+        let correlation = RenderCorrelation::new(None);
+
+        // When
+        let sequence = correlation.sequence_for_onset(3_010_000);
+
+        // Then
+        assert_eq!(sequence, None);
     }
 }
