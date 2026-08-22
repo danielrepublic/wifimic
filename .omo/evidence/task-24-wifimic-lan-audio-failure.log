@@ -1,0 +1,51 @@
+# Task 24 — failure-path evidence for heartbeat-timeout auto-stop
+# Captured 2026-08-22 from C:\Users\Daniel\Documents\opencode\wifimic.
+
+## Literal criterion classification
+
+- **PASS — state-machine inspection before live action:** `HEARTBEAT_TIMEOUT` is 30 seconds, and
+  the server control state includes `Idle`; Todo 6's deterministic timeout test passes separately.
+- **PASS — read-only preflight:** Windows and SSH probes completed with timestamps.
+- **FAIL — required live Windows client:** `CLIENT_PROCESS_wifimic_client.exe=ABSENT` and
+  `CLIENT_PROCESS_wifimic-client.exe=ABSENT`.
+- **FAIL — required installed/task artifacts:** `INSTALL_ROOT_EXISTS=False`,
+  `INSTALL_ROOT=ABSENT`, and `TASK_\wifimic\wifimic-client=ABSENT`.
+- **FAIL — live streaming session:** no Start/Ack, session ID, heartbeat, capture activity, or
+  streaming state was observed.
+- **FAIL — forced process termination path:** no real client process was present, so the requested
+  crash/power-loss simulation was not performed.
+- **FAIL — exact 30–35 second inclusive window:** no real last-heartbeat-to-Idle/capture-stop
+  elapsed time can be computed. There is no truthful PASS or simulated timing result.
+- **FAIL — fresh-session resumption:** no initial session existed to time out and no fresh session
+  was started.
+- **FAIL — server-survival check during the scenario:** PID 33601 was alive during preflight, but
+  the timeout scenario never ran; no claim is made that it survived that unexecuted scenario.
+
+## Exact blocker receipt
+
+```text
+PREFLIGHT_LOCAL_TIMESTAMP=2026-08-22T21:29:04.4467076+08:00
+TASK_\wifimic\wifimic-client=ABSENT
+INSTALL_ROOT_EXISTS=False
+CLIENT_PROCESS_wifimic_client.exe=ABSENT
+CLIENT_PROCESS_wifimic-client.exe=ABSENT
+
+PREFLIGHT_REMOTE_TIMESTAMP=2026-08-22T21:29:05,152186091+08:00
+SERVICE_ACTIVE=active
+MainPID=33601
+LISTENER_6902=UNCONN 0      0            0.0.0.0:6902       0.0.0.0:*    users:(("wifimic_server",pid=33601,fd=3))
+BINARY_STAT=/home/daniel/.local/bin/wifimic_server|2026-08-22 16:44:50.539301747 +0800|450624
+REMOTE_PROCESS=33601 /home/daniel/.local/bin/wifimic_server
+```
+
+The Linux service being active is only a preflight fact. It cannot establish a client stream,
+provide a last-heartbeat timestamp, or prove timeout timing. The active binary's stale mtime and
+the prior Todo 19 live Ack timeout are deployment blockers; this task does not authorize repairing
+them.
+
+## Non-mutation and cleanup receipt
+
+No client process was killed, no tray Exit path was used, no Scheduled Task was installed or
+registered, no executable was installed, no firewall rule was changed, and the remote service was
+not rebuilt, restarted, or otherwise mutated. No simulated heartbeat, Idle event, capture stop,
+fresh session, timestamp, or server-survival result was used. Todo 24 remains unchecked.
