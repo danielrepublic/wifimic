@@ -169,3 +169,8 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 - The 2026-08-22T21:29:05,152186091+08:00 Linux preflight found the service active as PID 33601
   with UDP 6902 listening. No Start/Ack, heartbeat, Idle, capture-stop, or fresh-session timestamp
   was invented after the Windows artifact gate failed.
+
+## 2026-08-22 F2 remediation
+
+- The F2 literal review is easiest to close without behavior drift when constants preserve the original numeric values and protocol offsets are derived from existing prefix/field-width constants rather than re-declaring wire positions.
+- `TrayError` now uses a boxed `#[source]` error for heterogeneous tray-icon operations, while the calibration CLI uses a dedicated error enum with transparent typed wrappers for transport, protocol, and calibration failures.

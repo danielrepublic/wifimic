@@ -123,7 +123,8 @@ pub(crate) enum TrayError {
     #[error("tray {operation} failed: {detail}")]
     Operation {
         operation: &'static str,
-        detail: String,
+        #[source]
+        detail: Box<dyn std::error::Error + Send + Sync>,
     },
 }
 
@@ -144,7 +145,7 @@ impl TrayRuntime {
 
         let icon = Icon::from_resource(1, None).map_err(|source| TrayError::Operation {
             operation: "load embedded tray icon resource",
-            detail: source.to_string(),
+            detail: Box::new(source),
         })?;
         let menu = Menu::new();
         let restart_item = MenuItem::new(RESTART_LABEL, true, None);
@@ -152,12 +153,12 @@ impl TrayRuntime {
         menu.append(&restart_item)
             .map_err(|source| TrayError::Operation {
                 operation: "append Restart menu item",
-                detail: source.to_string(),
+                detail: Box::new(source),
             })?;
         menu.append(&exit_item)
             .map_err(|source| TrayError::Operation {
                 operation: "append Exit menu item",
-                detail: source.to_string(),
+                detail: Box::new(source),
             })?;
         let icon = TrayIconBuilder::new()
             .with_icon(icon)
@@ -166,7 +167,7 @@ impl TrayRuntime {
             .build()
             .map_err(|source| TrayError::Operation {
                 operation: "create tray icon",
-                detail: source.to_string(),
+                detail: Box::new(source),
             })?;
 
         Ok(Self {

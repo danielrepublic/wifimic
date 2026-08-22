@@ -8,6 +8,9 @@ use super::{
     EventWaitOutcome, RenderConfig, RenderError, SAMPLES_PER_FRAME, STEREO_CHANNELS,
 };
 
+/// Requests WASAPI to choose the shared-mode buffer duration.
+const WASAPI_DEFAULT_BUFFER_DURATION_HNS: i64 = 0;
+
 /// A verified shared-mode, event-driven WASAPI render stream.
 pub struct Renderer {
     _com: ComApartment,
@@ -48,7 +51,7 @@ impl Renderer {
                 &Direction::Render,
                 &StreamMode::EventsShared {
                     autoconvert: true,
-                    buffer_duration_hns: 0,
+                    buffer_duration_hns: WASAPI_DEFAULT_BUFFER_DURATION_HNS,
                 },
             )
             .map_err(|source| RenderError::Wasapi {
@@ -147,7 +150,8 @@ impl Renderer {
                 });
             }
             let remaining = self.event_wait_timeout - elapsed;
-            let wait_timeout_ms = duration_to_millis(remaining).max(1);
+            let wait_timeout_ms =
+                duration_to_millis(remaining).max(duration_to_millis(super::MIN_EVENT_WAIT));
             match self.event.wait_for_event(wait_timeout_ms) {
                 Ok(()) => classify_event_wait(EventWaitOutcome::Signaled, wait_timeout_ms)?,
                 Err(wasapi::WasapiError::EventTimeout) => {

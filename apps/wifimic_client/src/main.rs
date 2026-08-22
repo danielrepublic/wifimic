@@ -6,12 +6,29 @@ pub mod logging;
 pub mod render;
 
 mod tray;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+#[derive(Debug, thiserror::Error)]
+enum CalibrationCliError {
+    #[error("calibration reply was filtered by the peer boundary")]
+    ReplyFilteredByPeerBoundary,
+    #[error("calibration peer returned a probe instead of a reply")]
+    PeerReturnedProbe,
+    #[error("calibration reply sequence did not match the probe")]
+    ReplySequenceMismatch,
+    #[error(transparent)]
+    Transport(#[from] std::io::Error),
+    #[error(transparent)]
+    Protocol(#[from] wifimic_protocol::ProtocolError),
+    #[error(transparent)]
+    Calibration(#[from] wifimic_protocol::latency::CalibrationError),
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (_diagnostics, _startup_rotation) = logging::initialize_diagnostics()?;
     if std::env::args().any(|argument| argument == "--calibrate") {
-        return run_calibration();
+        run_calibration()?;
+        return Ok(());
     }
     #[cfg(target_os = "windows")]
     run_windows_client()?;
@@ -19,9 +36,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 const CALIBRATION_PROBE_COUNT: u32 = 4;
-const CALIBRATION_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
+const CALIBRATION_READ_TIMEOUT: Duration = Duration::from_secs(1);
+#[cfg(target_os = "windows")]
+const RECEIVE_POLL_INTERVAL: Duration = Duration::from_millis(1);
 
-fn run_calibration() -> Result<(), Box<dyn std::error::Error>> {
+fn run_calibration() -> Result<(), CalibrationCliError> {
     use std::net::{Ipv4Addr, SocketAddr};
 
     use control::DatagramTransport;
@@ -39,7 +58,7 @@ fn run_calibration() -> Result<(), Box<dyn std::error::Error>> {
             t1_client_send_us,
         }))?;
         let Some(datagram) = socket.receive_once()? else {
-            return Err("calibration reply was filtered by the peer boundary".into());
+            return Err(CalibrationCliError::ReplyFilteredByPeerBoundary);
         };
         let CalibrationPacket::Reply {
             sequence: reply_sequence,
@@ -48,10 +67,10 @@ fn run_calibration() -> Result<(), Box<dyn std::error::Error>> {
             t3_server_send_us,
         } = decode_calibration(&datagram.payload)?
         else {
-            return Err("calibration peer returned a probe instead of a reply".into());
+            return Err(CalibrationCliError::PeerReturnedProbe);
         };
         if reply_sequence != sequence {
-            return Err("calibration reply sequence did not match the probe".into());
+            return Err(CalibrationCliError::ReplySequenceMismatch);
         }
         let result = NtpSample::new(
             t1_client_send_us,
@@ -79,7 +98,7 @@ fn unix_micros() -> u64 {
 
 #[cfg(target_os = "windows")]
 fn run_windows_client() -> Result<(), Box<dyn std::error::Error>> {
-    use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+    use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
     use control::{ControlPlane, InboundOutcome, UdpClientSocket};
     use render::{RenderConfig, Renderer};
@@ -88,7 +107,7 @@ fn run_windows_client() -> Result<(), Box<dyn std::error::Error>> {
     let tray = tray::TrayRuntime::new()?;
     let origin = Instant::now();
     let socket = UdpClientSocket::bind()?;
-    socket.set_read_timeout(Some(Duration::from_millis(1)))?;
+    socket.set_read_timeout(Some(RECEIVE_POLL_INTERVAL))?;
     let renderer = Renderer::open(RenderConfig::vb_cable())?;
     let mut control = ControlPlane::new(socket, renderer, origin);
     let epoch_ms = || {

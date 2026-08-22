@@ -16,6 +16,17 @@ pub const CALIBRATION_REPLY_TAG: u8 = 0x06;
 pub const CALIBRATION_PROBE_BYTES: usize = 14;
 /// Exact reply packet length.
 pub const CALIBRATION_REPLY_BYTES: usize = 30;
+const CALIBRATION_PREFIX_BYTES: usize = crate::MESSAGE_PREFIX_BYTES;
+const CALIBRATION_SEQUENCE_BYTES: usize = crate::SEQUENCE_BYTES;
+const CALIBRATION_TIMESTAMP_BYTES: usize = std::mem::size_of::<u64>();
+const CALIBRATION_SEQUENCE_START: usize = CALIBRATION_PREFIX_BYTES;
+const CALIBRATION_SEQUENCE_END: usize = CALIBRATION_SEQUENCE_START + CALIBRATION_SEQUENCE_BYTES;
+const CALIBRATION_T1_START: usize = CALIBRATION_SEQUENCE_END;
+const CALIBRATION_T1_END: usize = CALIBRATION_T1_START + CALIBRATION_TIMESTAMP_BYTES;
+const CALIBRATION_T2_START: usize = CALIBRATION_T1_END;
+const CALIBRATION_T2_END: usize = CALIBRATION_T2_START + CALIBRATION_TIMESTAMP_BYTES;
+const CALIBRATION_T3_START: usize = CALIBRATION_T2_END;
+const CALIBRATION_T3_END: usize = CALIBRATION_T3_START + CALIBRATION_TIMESTAMP_BYTES;
 /// Deterministic measurement tone frequency.
 pub const MEASUREMENT_TONE_FREQUENCY_HZ: u32 = 1_000;
 /// Deterministic measurement tone peak amplitude.
@@ -109,10 +120,10 @@ pub fn decode_calibration(packet: &[u8]) -> Result<CalibrationPacket, crate::Pro
             actual: packet.len(),
         });
     }
-    let mut sequence = [0_u8; 4];
-    sequence.copy_from_slice(&packet[2..6]);
-    let mut t1 = [0_u8; 8];
-    t1.copy_from_slice(&packet[6..14]);
+    let mut sequence = [0_u8; CALIBRATION_SEQUENCE_BYTES];
+    sequence.copy_from_slice(&packet[CALIBRATION_SEQUENCE_START..CALIBRATION_SEQUENCE_END]);
+    let mut t1 = [0_u8; CALIBRATION_TIMESTAMP_BYTES];
+    t1.copy_from_slice(&packet[CALIBRATION_T1_START..CALIBRATION_T1_END]);
     let sequence = u32::from_be_bytes(sequence);
     let t1_client_send_us = u64::from_be_bytes(t1);
     if tag == CALIBRATION_PROBE_TAG {
@@ -121,10 +132,10 @@ pub fn decode_calibration(packet: &[u8]) -> Result<CalibrationPacket, crate::Pro
             t1_client_send_us,
         });
     }
-    let mut t2 = [0_u8; 8];
-    let mut t3 = [0_u8; 8];
-    t2.copy_from_slice(&packet[14..22]);
-    t3.copy_from_slice(&packet[22..30]);
+    let mut t2 = [0_u8; CALIBRATION_TIMESTAMP_BYTES];
+    let mut t3 = [0_u8; CALIBRATION_TIMESTAMP_BYTES];
+    t2.copy_from_slice(&packet[CALIBRATION_T2_START..CALIBRATION_T2_END]);
+    t3.copy_from_slice(&packet[CALIBRATION_T3_START..CALIBRATION_T3_END]);
     Ok(CalibrationPacket::Reply {
         sequence,
         t1_client_send_us,
@@ -258,6 +269,14 @@ pub struct LatencyStats {
     pub conservative_p95_us: u64,
 }
 
+const PERCENTILE_ROUNDING_OFFSET: u64 = 99;
+const PERCENTILE_SCALE: u64 = 100;
+const PERCENTILE_MIN_RANK: u64 = 1;
+const PERCENTILE_INDEX_OFFSET: u64 = 1;
+const P50_RANK: u64 = 50;
+const P95_RANK: u64 = 95;
+const P99_RANK: u64 = 99;
+
 impl LatencyStats {
     #[must_use]
     pub fn from_microseconds(samples: impl IntoIterator<Item = u64>) -> Self {
@@ -268,15 +287,16 @@ impl LatencyStats {
                 return 0;
             }
             let rank = (u64::try_from(values.len()).unwrap_or(u64::MAX) * percent)
-                .saturating_add(99)
-                / 100;
-            values[usize::try_from(rank.max(1) - 1).unwrap_or(values.len() - 1)]
+                .saturating_add(PERCENTILE_ROUNDING_OFFSET)
+                / PERCENTILE_SCALE;
+            values[usize::try_from(rank.max(PERCENTILE_MIN_RANK) - PERCENTILE_INDEX_OFFSET)
+                .unwrap_or(values.len() - 1)]
         };
-        let raw_p95_us = percentile(95);
+        let raw_p95_us = percentile(P95_RANK);
         Self {
-            raw_p50_us: percentile(50),
+            raw_p50_us: percentile(P50_RANK),
             raw_p95_us,
-            raw_p99_us: percentile(99),
+            raw_p99_us: percentile(P99_RANK),
             conservative_p95_us: raw_p95_us.saturating_add(CONSERVATIVE_P95_MARGIN_US),
         }
     }

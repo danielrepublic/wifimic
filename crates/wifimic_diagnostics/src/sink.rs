@@ -6,6 +6,8 @@ use super::event::Event;
 use super::log_sink::WifimicLogSink;
 use super::types::EventRecord;
 
+const DEFAULT_RATE_LIMIT_INTERVAL: Duration = Duration::from_secs(1);
+
 /// A sink receives already-structured, metadata-only event records.
 pub trait EventSink: Send + Sync {
     fn record(&self, record: EventRecord);
@@ -148,7 +150,7 @@ impl RateLimiter {
     /// Creates the default one-event-per-second limiter.
     #[must_use]
     pub const fn standard() -> Self {
-        Self::new(Duration::from_secs(1))
+        Self::new(DEFAULT_RATE_LIMIT_INTERVAL)
     }
 
     /// Returns whether an event at `now` may be emitted and records admission time.

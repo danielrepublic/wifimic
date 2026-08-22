@@ -24,6 +24,7 @@ pub(crate) struct ProcessExit {
 }
 
 const MAX_STDERR_BYTES: usize = 4_096;
+const STDERR_READ_CHUNK_BYTES: usize = 512;
 
 pub(super) struct ParecLauncher {
     program: PathBuf,
@@ -106,7 +107,7 @@ fn read_bounded(stderr: &mut impl Read) -> io::Result<String> {
 }
 
 fn read_bounded_into(stderr: &mut impl Read, output: &mut String) -> io::Result<()> {
-    let mut buffer = [0_u8; 512];
+    let mut buffer = [0_u8; STDERR_READ_CHUNK_BYTES];
     let mut retained = Vec::with_capacity(MAX_STDERR_BYTES);
 
     loop {

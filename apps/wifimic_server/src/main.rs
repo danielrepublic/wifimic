@@ -15,12 +15,14 @@ use wifimic_protocol::{
 use crate::capture::CaptureHandle;
 use crate::control::{ControlError, ControlPlane};
 
+const RECEIVE_POLL_INTERVAL: Duration = Duration::from_millis(1);
+
 fn main() -> std::io::Result<()> {
     if std::env::args().any(|argument| argument == "--calibrate") {
         eprintln!("calibration responder enabled");
     }
     let mut socket = network::UdpServerSocket::bind()?;
-    socket.set_read_timeout(Some(Duration::from_millis(1)))?;
+    socket.set_read_timeout(Some(RECEIVE_POLL_INTERVAL))?;
     let diagnostics = EventContext::logging(Instant::now());
     let mut control = ControlPlane::new(CaptureHandle::new(), diagnostics);
     let mut peer: Option<SocketAddr> = None;
