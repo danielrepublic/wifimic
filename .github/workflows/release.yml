@@ -42,7 +42,7 @@ jobs:
           cp deploy/linux/wifimic-server-iptables.sh dist/linux/
           cp deploy/linux/wifimic-server.nft dist/linux/
           tar --create --gzip --file dist/wifimic-linux-x86_64.tar.gz -C dist/linux .
-          sha256sum dist/wifimic-linux-x86_64.tar.gz > dist/wifimic-linux-x86_64.tar.gz.sha256
+          (cd dist && sha256sum wifimic-linux-x86_64.tar.gz > wifimic-linux-x86_64.tar.gz.sha256)
           cp deploy/release/install-wifimic-linux.sh dist/install-wifimic-linux.sh
       - uses: actions/upload-artifact@v4
         with:
