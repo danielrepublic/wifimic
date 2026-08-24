@@ -277,6 +277,35 @@ function New-WifimicFirewallSignature {
     }
 }
 
+function ConvertTo-WifimicFirewallAddressList {
+    [CmdletBinding()]
+    param([object]$Value)
+
+    @(
+        foreach ($item in @($Value)) {
+            if ($null -eq $item) {
+                ''
+                continue
+            }
+            foreach ($candidate in ([string]$item).Split(',')) {
+                $address = $candidate.Trim()
+                $slash = $address.IndexOf('/')
+                $hostPart = if ($slash -ge 0) { $address.Substring(0, $slash).Trim() } else { $address }
+                $prefix = if ($slash -ge 0) { $address.Substring($slash + 1).Trim() } else { $null }
+                $parsed = $null
+                if ([System.Net.IPAddress]::TryParse($hostPart, [ref]$parsed) -and
+                    $parsed.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork -and
+                    ($slash -lt 0 -or $prefix -eq '32')) {
+                    '{0}/32' -f $parsed.ToString()
+                }
+                else {
+                    $address
+                }
+            }
+        }
+    )
+}
+
 function Test-WifimicFirewallSignature {
     [CmdletBinding()]
     param(
@@ -284,11 +313,17 @@ function Test-WifimicFirewallSignature {
         [Parameter(Mandatory = $true)][pscustomobject]$Expected
     )
 
+    $actualAddresses = @(ConvertTo-WifimicFirewallAddressList -Value $Actual.RemoteAddress)
+    $expectedAddresses = @(ConvertTo-WifimicFirewallAddressList -Value $Expected.RemoteAddress)
+    $peerAddressMatches = $actualAddresses.Count -eq 1 -and
+        $expectedAddresses.Count -eq 1 -and
+        [string]::Equals($actualAddresses[0], $expectedAddresses[0], [System.StringComparison]::OrdinalIgnoreCase)
+
     return [string]::Equals($Actual.Name, $Expected.Name, [System.StringComparison]::Ordinal) -and
         [string]::Equals($Actual.DisplayName, $Expected.DisplayName, [System.StringComparison]::Ordinal) -and
         [string]::Equals($Actual.Protocol, $Expected.Protocol, [System.StringComparison]::OrdinalIgnoreCase) -and
         [string]::Equals([string]$Actual.LocalPort, [string]$Expected.LocalPort, [System.StringComparison]::Ordinal) -and
-        [string]::Equals($Actual.RemoteAddress, $Expected.RemoteAddress, [System.StringComparison]::OrdinalIgnoreCase) -and
+        $peerAddressMatches -and
         [string]::Equals($Actual.Profile, $Expected.Profile, [System.StringComparison]::OrdinalIgnoreCase) -and
         [string]::Equals($Actual.Direction, $Expected.Direction, [System.StringComparison]::OrdinalIgnoreCase) -and
         [string]::Equals($Actual.Action, $Expected.Action, [System.StringComparison]::OrdinalIgnoreCase)
