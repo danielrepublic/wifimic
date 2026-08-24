@@ -52,15 +52,54 @@ fn render_zero_event_wait_is_invalid_configuration() {
 }
 
 #[test]
-fn render_mono_samples_are_fanned_out_to_interleaved_stereo() {
+fn render_mono_samples_are_fanned_out_to_interleaved_stereo_with_gain_applied() {
     let mut mono = [0_u8; PCM_PAYLOAD_BYTES];
     mono[0..2].copy_from_slice(&1_i16.to_le_bytes());
     mono[2..4].copy_from_slice(&(-2_i16).to_le_bytes());
 
     let stereo = mono_to_stereo_bytes(&mono);
 
-    assert_eq!(&stereo[0..4], &[1, 0, 1, 0]);
-    assert_eq!(&stereo[4..8], &[254, 255, 254, 255]);
+    let gain = i16::try_from(RENDER_GAIN_MULTIPLIER).expect("gain fits i16");
+    let expected_first = gain.to_le_bytes();
+    let expected_second = (-2_i16 * gain).to_le_bytes();
+    assert_eq!(
+        &stereo[0..4],
+        &[
+            expected_first[0],
+            expected_first[1],
+            expected_first[0],
+            expected_first[1]
+        ]
+    );
+    assert_eq!(
+        &stereo[4..8],
+        &[
+            expected_second[0],
+            expected_second[1],
+            expected_second[0],
+            expected_second[1]
+        ]
+    );
+}
+
+#[test]
+fn render_gain_saturates_instead_of_wrapping_at_full_scale_amplitude() {
+    let mut mono = [0_u8; PCM_PAYLOAD_BYTES];
+    mono[0..2].copy_from_slice(&i16::MAX.to_le_bytes());
+    mono[2..4].copy_from_slice(&i16::MIN.to_le_bytes());
+
+    let stereo = mono_to_stereo_bytes(&mono);
+
+    let max_bytes = i16::MAX.to_le_bytes();
+    let min_bytes = i16::MIN.to_le_bytes();
+    assert_eq!(
+        &stereo[0..4],
+        &[max_bytes[0], max_bytes[1], max_bytes[0], max_bytes[1]]
+    );
+    assert_eq!(
+        &stereo[4..8],
+        &[min_bytes[0], min_bytes[1], min_bytes[0], min_bytes[1]]
+    );
 }
 
 #[test]

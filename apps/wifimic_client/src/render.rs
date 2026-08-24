@@ -81,16 +81,38 @@ pub(crate) fn select_endpoint_index(
         })
 }
 
-/// Duplicates each little-endian mono sample into interleaved stereo bytes.
+/// Fixed software playback gain applied to every captured PCM sample.
+///
+/// v0.1.8: the raw captured signal is quiet enough that Discord's built-in
+/// noise suppression attenuates speech to near-inaudibility. Boosting the
+/// signal before it reaches the VB-CABLE render endpoint keeps voice audible
+/// after Discord's noise suppression runs.
+const RENDER_GAIN_MULTIPLIER: i32 = 4;
+
+/// Applies [`RENDER_GAIN_MULTIPLIER`] to one little-endian 16-bit PCM sample,
+/// saturating instead of wrapping when the boosted sample exceeds `i16` range.
+#[must_use]
+fn apply_gain(sample: &[u8]) -> [u8; BYTES_PER_SAMPLE] {
+    let original = i16::from_le_bytes([sample[0], sample[1]]);
+    let boosted = i32::from(original).saturating_mul(RENDER_GAIN_MULTIPLIER);
+    let clamped = boosted.clamp(i32::from(i16::MIN), i32::from(i16::MAX));
+    let gained =
+        i16::try_from(clamped).unwrap_or(if clamped.is_positive() { i16::MAX } else { i16::MIN });
+    gained.to_le_bytes()
+}
+
+/// Applies playback gain to each little-endian mono sample, then duplicates
+/// it into interleaved stereo bytes.
 #[must_use]
 pub(crate) fn mono_to_stereo_bytes(mono: &[u8; PCM_PAYLOAD_BYTES]) -> [u8; STEREO_FRAME_BYTES] {
     let mut stereo = [0_u8; STEREO_FRAME_BYTES];
     for (sample_index, sample) in mono.chunks_exact(BYTES_PER_SAMPLE).enumerate() {
+        let gained = apply_gain(sample);
         let stereo_start = sample_index * BYTES_PER_SAMPLE * STEREO_CHANNELS;
-        stereo[stereo_start..stereo_start + BYTES_PER_SAMPLE].copy_from_slice(sample);
+        stereo[stereo_start..stereo_start + BYTES_PER_SAMPLE].copy_from_slice(&gained);
         stereo
             [stereo_start + BYTES_PER_SAMPLE..stereo_start + (BYTES_PER_SAMPLE * STEREO_CHANNELS)]
-            .copy_from_slice(sample);
+            .copy_from_slice(&gained);
     }
     stereo
 }
