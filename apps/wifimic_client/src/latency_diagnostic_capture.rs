@@ -231,3 +231,7 @@ fn unix_micros() -> u64 {
             u64::try_from(duration.as_micros()).unwrap_or(u64::MAX)
         })
 }
+
+#[cfg(test)]
+#[path = "latency_diagnostic_capture_tests.rs"]
+mod tests;
