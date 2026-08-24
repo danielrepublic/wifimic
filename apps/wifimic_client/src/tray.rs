@@ -2,9 +2,14 @@ use std::time::Instant;
 
 use crate::control::{AudioRenderer, ControlError, ControlPlane, DatagramTransport};
 
-pub(crate) const TOOLTIP: &str = "wifimic-client";
+pub(crate) const APP_NAME: &str = "wifimic-client";
 pub(crate) const RESTART_LABEL: &str = "Restart";
 pub(crate) const EXIT_LABEL: &str = "Exit";
+
+/// Formats the tray icon tooltip as "{name} {version}", e.g. "wifimic-client v0.1.7".
+pub(crate) fn tooltip_text(name: &str, version: &str) -> String {
+    format!("{name} {version}")
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MenuEventId {
@@ -163,7 +168,7 @@ impl TrayRuntime {
         let icon = TrayIconBuilder::new()
             .with_icon(icon)
             .with_menu(Box::new(menu))
-            .with_tooltip(TOOLTIP)
+            .with_tooltip(tooltip_text(APP_NAME, env!("WIFIMIC_CLIENT_VERSION")))
             .build()
             .map_err(|source| TrayError::Operation {
                 operation: "create tray icon",

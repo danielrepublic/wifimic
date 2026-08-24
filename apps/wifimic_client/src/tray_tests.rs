@@ -1,8 +1,22 @@
 use std::time::Instant;
 
 use super::{
-    dispatch_menu_event, render_if_running, ClientRunState, MenuEvent, TrayControl, TrayDispatch,
+    dispatch_menu_event, render_if_running, tooltip_text, ClientRunState, MenuEvent, TrayControl,
+    TrayDispatch,
 };
+
+#[test]
+fn tooltip_text_joins_app_name_and_version_with_a_space() {
+    // Given
+    let name = "wifimic-client";
+    let version = "v0.1.7";
+
+    // When
+    let tooltip = tooltip_text(name, version);
+
+    // Then
+    assert_eq!(tooltip, "wifimic-client v0.1.7");
+}
 
 #[derive(Debug, PartialEq, Eq)]
 struct TestError;
