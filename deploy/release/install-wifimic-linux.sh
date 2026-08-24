@@ -61,6 +61,10 @@ done
 
 install -Dm755 "$server_binary" "$HOME/.local/bin/wifimic_server"
 install -Dm644 "$unit_file" "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/wifimic-server.service"
+marker_file="$stage_path/test.md"
+if [[ -f "$marker_file" ]]; then
+    install -Dm644 "$marker_file" "$HOME/.local/bin/test.md"
+fi
 sudo loginctl enable-linger "$USER"
 systemctl --user daemon-reload
 systemctl --user enable --now "$SERVICE_NAME"
