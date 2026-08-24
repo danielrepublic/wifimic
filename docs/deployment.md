@@ -703,6 +703,7 @@ Remove-Item -LiteralPath 'C:\Program Files\wifimic-client' -Recurse -Force
 
 ## 12. 參考檔案
 
+- `docs/release-process.md` — **每版必須遵循的發布與真實部署驗證強制流程**（推送、打標籤、確認 GitHub Release、實際部署、端到端人工驗證）
 - `docs/deployment-linux.md` — Linux 伺服器詳細部署指南（本文件第 4 節為其摘要）
 - `deploy/systemd/wifimic-server.service` — systemd 使用者單元定義
 - `deploy/linux/wifimic-server-firewall.sh` — 防火牆部署主腳本（含後端選擇邏輯）

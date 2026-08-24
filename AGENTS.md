@@ -11,3 +11,7 @@ Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-
 ### Domain docs
 
 Single-context — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+### Release process
+
+A version is not "done" until it has been pushed, tagged, and actually deployed and verified on the real two-machine environment (Linux `192.168.0.210` / Windows `192.168.0.200`) — a green CI build alone is not sufficient. Mandatory per-version checklist: see `docs/release-process.md`.
