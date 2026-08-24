@@ -1,0 +1,33 @@
+# wifimic
+
+`v0.1.0` is the first frozen baseline: Linux captures the fixed raw PipeWire microphone and streams it to the Windows VB-CABLE render endpoint at 48 kHz. It has been manually verified to keep normal speech cadence without frame drops. It does not yet suppress the microphone's analogue background noise.
+
+## Install from GitHub
+
+The two machines have fixed peer addresses: Linux `192.168.0.210` and Windows `192.168.0.200`. Install VB-Audio Virtual Cable first on Windows.
+
+### Windows client
+
+Open an Administrator PowerShell in an interactive session, then run:
+
+```powershell
+irm https://github.com/danielrepublic/wifimic/releases/latest/download/install-wifimic-windows.ps1 | iex
+```
+
+The installer verifies the release zip SHA-256, installs `wifimic_client.exe` to `C:\Program Files\wifimic-client`, registers the interactive logon task, and scopes the UDP 6902 firewall rule to the Linux peer.
+
+### Linux server
+
+Run:
+
+```bash
+curl -fsSL https://github.com/danielrepublic/wifimic/releases/latest/download/install-wifimic-linux.sh | bash
+```
+
+The installer verifies the Linux archive SHA-256, installs the user service, enables linger, and prompts for `sudo` only to install the peer-scoped firewall rule.
+
+To install a specific release rather than the latest, download the release installer and pass its tag as the first argument.
+
+## Verification
+
+Start the Windows client, select `CABLE Output (VB-Audio Virtual Cable)` as the microphone in Discord, and verify normal speech cadence. For detailed operational and network requirements, see [docs/deployment.md](docs/deployment.md).

@@ -1,0 +1,62 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  package-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo build --release --locked -p wifimic_client
+      - shell: pwsh
+        run: |
+          $stage = 'dist/windows'
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item target/release/wifimic_client.exe "$stage/wifimic_client.exe"
+          Copy-Item deploy/windows/install-wifimic-client.ps1 "$stage/install-wifimic-client.ps1"
+          Compress-Archive -Path "$stage/*" -DestinationPath dist/wifimic-windows-x86_64.zip
+          $hash = (Get-FileHash dist/wifimic-windows-x86_64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  wifimic-windows-x86_64.zip" | Set-Content -NoNewline dist/wifimic-windows-x86_64.zip.sha256
+          Copy-Item deploy/release/install-wifimic-windows.ps1 dist/install-wifimic-windows.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: dist/*
+
+  package-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo build --release --locked -p wifimic_server
+      - run: |
+          mkdir -p dist/linux
+          cp target/release/wifimic_server dist/linux/
+          cp deploy/systemd/wifimic-server.service dist/linux/
+          cp deploy/linux/wifimic-server-firewall.sh dist/linux/
+          cp deploy/linux/wifimic-server-iptables.sh dist/linux/
+          cp deploy/linux/wifimic-server.nft dist/linux/
+          tar --create --gzip --file dist/wifimic-linux-x86_64.tar.gz -C dist/linux .
+          sha256sum dist/wifimic-linux-x86_64.tar.gz > dist/wifimic-linux-x86_64.tar.gz.sha256
+          cp deploy/release/install-wifimic-linux.sh dist/install-wifimic-linux.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-release
+          path: dist/*
+
+  publish:
+    needs: [package-windows, package-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --generate-notes --title "$GITHUB_REF_NAME"
