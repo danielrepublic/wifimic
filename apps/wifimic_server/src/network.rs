@@ -1,10 +1,18 @@
 use std::io;
-use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
 use std::time::Duration;
 
 /// The fixed UDP port shared by the server's control and audio datagrams.
 pub const SERVER_PORT: u16 = 6_902;
+/// The configured Wi-Fi address of the Linux audio server.
+pub const LINUX_SERVER_IP: Ipv4Addr = Ipv4Addr::new(192, 168, 0, 210);
 const MAX_DATAGRAM_BYTES: usize = u16::MAX as usize;
+
+/// Returns the exact local address that owns WiFiMic's outbound UDP source IP.
+#[must_use]
+pub const fn server_bind_address() -> SocketAddr {
+    SocketAddr::V4(SocketAddrV4::new(LINUX_SERVER_IP, SERVER_PORT))
+}
 
 /// The one Windows peer permitted to send control and audio datagrams.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,7 +63,7 @@ impl UdpServerSocket {
     ///
     /// Returns the operating-system error if the socket cannot be bound.
     pub fn bind() -> io::Result<Self> {
-        Self::bind_at(SocketAddr::from((Ipv4Addr::UNSPECIFIED, SERVER_PORT)))
+        Self::bind_at(server_bind_address())
     }
 
     fn bind_at(bind_address: SocketAddr) -> io::Result<Self> {
@@ -105,10 +113,20 @@ impl UdpServerSocket {
 mod tests {
     use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
 
-    use super::{UdpServerSocket, WindowsPeerIp};
+    use super::{
+        server_bind_address, UdpServerSocket, WindowsPeerIp, LINUX_SERVER_IP, SERVER_PORT,
+    };
 
     const CONTROL_TAG: u8 = 0x01;
     const AUDIO_TAG: u8 = 0x00;
+
+    #[test]
+    fn network_binds_the_configured_linux_peer_address() {
+        assert_eq!(
+            server_bind_address(),
+            SocketAddr::from((LINUX_SERVER_IP, SERVER_PORT))
+        );
+    }
 
     #[test]
     fn network_accepts_approved_peer() {
