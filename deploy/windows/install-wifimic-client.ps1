@@ -200,14 +200,22 @@ function ConvertTo-WifimicTaskDefinition {
     )
 
     [xml]$xml = $XmlText
-    $command = (Get-WifimicTaskXmlNode -Xml $xml -XPath '//task:Actions/task:Exec/task:Command').InnerText
-    $workingDirectory = (Get-WifimicTaskXmlNode -Xml $xml -XPath '//task:Actions/task:Exec/task:WorkingDirectory').InnerText
-    $argumentsNode = Get-WifimicTaskXmlNodeOptional -Xml $xml -XPath '//task:Actions/task:Exec/task:Arguments'
+    $namespace = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
+    $namespace.AddNamespace('task', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
+    $getNode = {
+        param([string]$XPath)
+        $node = $xml.SelectSingleNode($XPath, $namespace)
+        if ($null -eq $node) { throw "Task XML is missing '$XPath'." }
+        return $node
+    }.GetNewClosure()
+    $command = (& $getNode '//task:Actions/task:Exec/task:Command').InnerText
+    $workingDirectory = (& $getNode '//task:Actions/task:Exec/task:WorkingDirectory').InnerText
+    $argumentsNode = $xml.SelectSingleNode('//task:Actions/task:Exec/task:Arguments', $namespace)
     $arguments = if ($null -eq $argumentsNode) { '' } else { $argumentsNode.InnerText }
-    $uri = (Get-WifimicTaskXmlNode -Xml $xml -XPath '//task:RegistrationInfo/task:URI').InnerText
-    $principal = Get-WifimicTaskXmlNode -Xml $xml -XPath '//task:Principals/task:Principal'
+    $uri = (& $getNode '//task:RegistrationInfo/task:URI').InnerText
+    $principal = & $getNode '//task:Principals/task:Principal'
     $principalId = $principal.Attributes['id'].Value
-    $logonType = (Get-WifimicTaskXmlNode -Xml $xml -XPath '//task:Principals/task:Principal/task:LogonType').InnerText
+    $logonType = (& $getNode '//task:Principals/task:Principal/task:LogonType').InnerText
 
     [pscustomobject]@{
         TaskPath = $Identity.TaskPath
@@ -597,6 +605,7 @@ function New-WifimicNativeOperations {
     [CmdletBinding()]
     param()
 
+    $convertTaskDefinition = ${function:ConvertTo-WifimicTaskDefinition}.GetNewClosure()
     $setTask = {
         param($identity, $xmlText, $enabled)
         $temporary = Join-Path ([System.IO.Path]::GetTempPath()) ('wifimic-client-task-' + [Guid]::NewGuid().ToString('N') + '.xml')
@@ -619,8 +628,8 @@ function New-WifimicNativeOperations {
             $task = Get-ScheduledTask -TaskPath $identity.TaskFolder -TaskName $identity.TaskName -ErrorAction SilentlyContinue
             if ($null -eq $task) { return $null }
             $xml = Export-ScheduledTask -TaskPath $identity.TaskFolder -TaskName $identity.TaskName -ErrorAction Stop
-            return ConvertTo-WifimicTaskDefinition -Identity $identity -XmlText $xml -Enabled ([bool]$task.Settings.Enabled)
-        }
+            return & $convertTaskDefinition -Identity $identity -XmlText $xml -Enabled ([bool]$task.Settings.Enabled)
+        }.GetNewClosure()
         SetTask = $setTask
         RestoreTask = {
             param($identity, $xmlText, $enabled)
@@ -708,6 +717,7 @@ function New-WifimicFakeOperations {
 
     $stateInstallRoot = Join-Path $StateRoot 'install'
     $canonicalRoot = $script:CanonicalInstallRoot
+    $convertTaskDefinition = ${function:ConvertTo-WifimicTaskDefinition}.GetNewClosure()
     $state = [pscustomobject]@{
         Task = $null
         Firewall = $null
@@ -734,12 +744,12 @@ function New-WifimicFakeOperations {
         SetTask = {
             param($identity, $xmlText, $enabled)
             & $record 'SetTask'
-            $state.Task = ConvertTo-WifimicTaskDefinition -Identity $identity -XmlText $xmlText -Enabled ([bool]$enabled)
+            $state.Task = & $convertTaskDefinition -Identity $identity -XmlText $xmlText -Enabled ([bool]$enabled)
         }.GetNewClosure()
         RestoreTask = {
             param($identity, $xmlText, $enabled)
             & $record 'RestoreTask'
-            $state.Task = ConvertTo-WifimicTaskDefinition -Identity $identity -XmlText $xmlText -Enabled ([bool]$enabled)
+            $state.Task = & $convertTaskDefinition -Identity $identity -XmlText $xmlText -Enabled ([bool]$enabled)
         }.GetNewClosure()
         RemoveTask = { param($identity) & $record 'RemoveTask'; $state.Task = $null }.GetNewClosure()
         GetFirewall = { param($identity) & $record 'GetFirewall'; return $state.Firewall }.GetNewClosure()
