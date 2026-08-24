@@ -16,12 +16,12 @@ $temporaryRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('wifimic-release-'
 function Get-ExpectedSha256 {
     param([Parameter(Mandatory = $true)][string]$ManifestPath, [Parameter(Mandatory = $true)][string]$Name)
 
-    $escapedName = [regex]::Escape($Name)
-    $entry = Get-Content -LiteralPath $ManifestPath | Where-Object { $_ -match "^([0-9a-fA-F]{64})  $escapedName$" }
-    if ($entry.Count -ne 1) {
-        throw "The checksum manifest does not contain one entry for '$Name'."
+    $linePattern = '^[0-9A-Fa-f]{64}\s+\*?' + [regex]::Escape($Name) + '\s*$'
+    $entries = @(Get-Content -LiteralPath $ManifestPath | Where-Object { $_ -match $linePattern })
+    if ($entries.Count -ne 1) {
+        throw "The checksum manifest must contain exactly one entry for '$Name'; found $($entries.Count)."
     }
-    return ($entry -replace '^([0-9a-fA-F]{64}).*$', '$1').ToLowerInvariant()
+    return (($entries[0] -split '\s+')[0]).ToLowerInvariant()
 }
 
 try {
