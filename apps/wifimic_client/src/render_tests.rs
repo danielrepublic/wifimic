@@ -1,8 +1,8 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-#[cfg(target_os = "windows")]
-use wifimic_protocol::AudioFrame;
+use wifimic_protocol::{AudioFrame, BYTES_PER_SAMPLE, PCM_PAYLOAD_BYTES};
 
+use super::fifo::{plan_render_frames, PcmFifo};
 use super::*;
 
 #[test]
@@ -64,35 +64,80 @@ fn render_mono_samples_are_fanned_out_to_interleaved_stereo() {
 }
 
 #[test]
-fn render_undersized_buffer_is_a_typed_capacity_error() {
-    let error = validate_buffer_capacity(239, SAMPLES_PER_FRAME as u32)
-        .expect_err("one frame short must fail");
+fn render_capacity_plan_consumes_all_two_protocol_frames_when_capacity_is_480() {
+    let first = test_audio_frame(1, 0x1111);
+    let second = test_audio_frame(2, 0x2222);
+    let mut fifo = PcmFifo::new(4);
+    fifo.push(&first).expect("first frame fits");
+    fifo.push(&second).expect("second frame fits");
 
-    assert!(matches!(
-        error,
-        RenderError::BufferTooSmall {
-            available_frames: 239,
-            required_frames: 240
-        }
-    ));
+    let writable = plan_render_frames(480, fifo.queued_device_frames());
+    let mut actual = Vec::new();
+    fifo.copy_front(writable, &mut actual);
+    fifo.discard_front(writable);
+
+    let mut expected = Vec::new();
+    expected.extend(mono_to_stereo_bytes(&first.pcm));
+    expected.extend(mono_to_stereo_bytes(&second.pcm));
+    assert_eq!(writable, 480);
+    assert_eq!(actual, expected);
+    assert_eq!(fifo.queued_device_frames(), 0);
 }
 
 #[test]
-fn render_event_timeout_is_a_bounded_typed_error() {
-    let error = classify_event_wait(EventWaitOutcome::TimedOut, 100)
-        .expect_err("an absent event must fail the bounded wait");
+fn render_capacity_plan_preserves_order_when_native_capacity_is_not_a_protocol_multiple() {
+    let frames = [
+        test_audio_frame(1, 0x1111),
+        test_audio_frame(2, 0x2222),
+        test_audio_frame(3, 0x3333),
+    ];
+    let mut fifo = PcmFifo::new(4);
+    for frame in &frames {
+        fifo.push(frame).expect("test frame fits");
+    }
 
-    assert!(matches!(
-        error,
-        RenderError::EventWaitTimeout {
-            wait_timeout_ms: 100
-        }
-    ));
+    let mut actual = Vec::new();
+    for capacity in [300_usize, 180, 240] {
+        let capacity_frames = u32::try_from(capacity).expect("test capacity fits u32");
+        let writable = plan_render_frames(capacity_frames, fifo.queued_device_frames());
+        let mut chunk = Vec::new();
+        fifo.copy_front(writable, &mut chunk);
+        fifo.discard_front(writable);
+        actual.extend(chunk);
+        assert_eq!(writable, capacity);
+    }
+
+    let mut expected = Vec::new();
+    for frame in &frames {
+        expected.extend(mono_to_stereo_bytes(&frame.pcm));
+    }
+    assert_eq!(actual, expected);
+    assert_eq!(fifo.queued_device_frames(), 0);
 }
 
 #[test]
-fn render_signaled_event_is_accepted() {
-    assert!(classify_event_wait(EventWaitOutcome::Signaled, 100).is_ok());
+fn render_pcm_fifo_rejects_a_frame_only_when_bounded_storage_is_full() {
+    let mut fifo = PcmFifo::new(2);
+    fifo.push(&test_audio_frame(1, 0x1111))
+        .expect("first frame fits");
+    fifo.push(&test_audio_frame(2, 0x2222))
+        .expect("second frame fits");
+
+    let error = fifo
+        .push(&test_audio_frame(3, 0x3333))
+        .expect_err("a full renderer FIFO must report backpressure");
+    assert!(matches!(
+        error,
+        RenderError::QueueFull { capacity_frames: 2 }
+    ));
+}
+
+fn test_audio_frame(session_id: u64, sample: i16) -> AudioFrame {
+    let mut pcm = [0_u8; PCM_PAYLOAD_BYTES];
+    for sample_bytes in pcm.chunks_exact_mut(BYTES_PER_SAMPLE) {
+        sample_bytes.copy_from_slice(&sample.to_le_bytes());
+    }
+    AudioFrame::new(session_id, 0, pcm)
 }
 
 #[cfg(target_os = "windows")]
@@ -110,6 +155,7 @@ fn render_live_vb_cable_accepts_one_khz_tone() {
     let renderer = Renderer::open(RenderConfig::vb_cable()).expect("open VB-CABLE render");
     let mut renderer = renderer;
     let mut sequence = 0_u32;
+    let submission_started_at = Instant::now();
 
     for _ in 0..400 {
         let mut pcm = [0_u8; PCM_PAYLOAD_BYTES];
@@ -129,5 +175,10 @@ fn render_live_vb_cable_accepts_one_khz_tone() {
         sequence = sequence.wrapping_add(1);
     }
 
+    let submission_duration = submission_started_at.elapsed();
+    assert!(
+        submission_duration < Duration::from_secs(3),
+        "two seconds of protocol PCM must enqueue in under three seconds; took {submission_duration:?}"
+    );
     renderer.stop().expect("stop VB-CABLE render");
 }

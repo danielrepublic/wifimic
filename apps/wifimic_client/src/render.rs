@@ -8,6 +8,7 @@ use wifimic_protocol::{BYTES_PER_SAMPLE, PCM_PAYLOAD_BYTES};
 pub const DEFAULT_RENDER_ENDPOINT: &str = "CABLE Input (VB-Audio Virtual Cable)";
 const DEFAULT_EVENT_WAIT: Duration = Duration::from_millis(100);
 const MIN_EVENT_WAIT: Duration = Duration::from_millis(1);
+pub(crate) const MAX_RENDER_QUEUE_FRAMES: usize = 512;
 pub(crate) const SAMPLES_PER_FRAME: usize = wifimic_protocol::SAMPLES_PER_FRAME;
 pub(crate) const STEREO_CHANNELS: usize = 2;
 pub(crate) const STEREO_FRAME_BYTES: usize = PCM_PAYLOAD_BYTES * STEREO_CHANNELS;
@@ -29,13 +30,23 @@ pub enum RenderError {
     EventWaitTimeout { wait_timeout_ms: u32 },
     #[error("render event wait timeout must be at least 1ms")]
     InvalidEventWaitTimeout,
-    #[error(
-        "render buffer has {available_frames} available frames, but {required_frames} are required"
-    )]
-    BufferTooSmall {
-        available_frames: u32,
-        required_frames: u32,
+    #[error("render PCM FIFO is full at {capacity_frames} protocol frames")]
+    QueueFull { capacity_frames: usize },
+    #[error("render worker failed: {details}")]
+    WorkerFailed { details: String },
+    #[error("render worker stopped unexpectedly")]
+    WorkerStopped,
+    #[error("render worker could not be started")]
+    WorkerStartupFailed,
+    #[error("render worker thread could not be spawned: {source}")]
+    WorkerSpawn {
+        #[source]
+        source: std::io::Error,
     },
+    #[error("render worker state was poisoned")]
+    WorkerStatePoisoned,
+    #[error("render worker panicked")]
+    WorkerPanicked,
     #[error("render buffer size overflow for {frames} frames of {bytes_per_frame} bytes")]
     BufferSizeOverflow { frames: u32, bytes_per_frame: u32 },
     #[error("WASAPI {operation} failed: {source}")]
@@ -84,35 +95,6 @@ pub(crate) fn mono_to_stereo_bytes(mono: &[u8; PCM_PAYLOAD_BYTES]) -> [u8; STERE
     stereo
 }
 
-pub(crate) fn validate_buffer_capacity(
-    available_frames: u32,
-    required_frames: u32,
-) -> Result<(), RenderError> {
-    if available_frames < required_frames {
-        return Err(RenderError::BufferTooSmall {
-            available_frames,
-            required_frames,
-        });
-    }
-    Ok(())
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum EventWaitOutcome {
-    Signaled,
-    TimedOut,
-}
-
-pub(crate) fn classify_event_wait(
-    outcome: EventWaitOutcome,
-    wait_timeout_ms: u32,
-) -> Result<(), RenderError> {
-    match outcome {
-        EventWaitOutcome::Signaled => Ok(()),
-        EventWaitOutcome::TimedOut => Err(RenderError::EventWaitTimeout { wait_timeout_ms }),
-    }
-}
-
 /// Explicit render configuration consumed by later control/jitter code.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderConfig {
@@ -155,6 +137,12 @@ impl RenderConfig {
     pub fn endpoint_name(&self) -> &str {
         &self.endpoint_name
     }
+
+    /// Returns the worker's bounded event wait duration.
+    #[must_use]
+    pub(crate) const fn event_wait_timeout(&self) -> Duration {
+        self.event_wait_timeout
+    }
 }
 
 impl Default for RenderConfig {
@@ -162,6 +150,9 @@ impl Default for RenderConfig {
         Self::vb_cable()
     }
 }
+
+#[path = "render_fifo.rs"]
+mod fifo;
 
 #[cfg(target_os = "windows")]
 #[path = "render_windows.rs"]

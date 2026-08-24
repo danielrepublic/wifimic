@@ -10,7 +10,7 @@ impl Renderer {
         Err(RenderError::UnsupportedPlatform)
     }
 
-    pub fn render_frame(&self, _frame: &AudioFrame) -> Result<(), RenderError> {
+    pub fn render_frame(&mut self, _frame: &AudioFrame) -> Result<(), RenderError> {
         Err(RenderError::UnsupportedPlatform)
     }
 
