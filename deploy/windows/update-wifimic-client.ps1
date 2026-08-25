@@ -692,7 +692,16 @@ function New-WifimicNativeOperations {
             try {
                 [System.IO.File]::Copy($source, $temporary, $true)
                 if ([System.IO.File]::Exists($destination)) {
-                    [System.IO.File]::Replace($temporary, $destination, $null, $true)
+                    # A $null backup path throws ArgumentException ("The
+                    # specified path format is invalid.") from
+                    # File.InternalReplace on this PowerShell 5.1 (.NET
+                    # Framework) runtime; pass a real, immediately-deleted
+                    # backup path instead of relying on the null overload.
+                    $backup = $destination + '.wifimic-backup-' + [Guid]::NewGuid().ToString('N')
+                    try {
+                        [System.IO.File]::Replace($temporary, $destination, $backup, $true)
+                    }
+                    finally { Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue }
                 }
                 else {
                     [System.IO.File]::Move($temporary, $destination)
@@ -706,7 +715,11 @@ function New-WifimicNativeOperations {
             try {
                 [System.IO.File]::WriteAllBytes($temporary, [byte[]]$bytes)
                 if ([System.IO.File]::Exists($destination)) {
-                    [System.IO.File]::Replace($temporary, $destination, $null, $true)
+                    $backup = $destination + '.wifimic-backup-' + [Guid]::NewGuid().ToString('N')
+                    try {
+                        [System.IO.File]::Replace($temporary, $destination, $backup, $true)
+                    }
+                    finally { Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue }
                 }
                 else {
                     [System.IO.File]::Move($temporary, $destination)
