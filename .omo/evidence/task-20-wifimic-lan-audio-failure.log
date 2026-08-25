@@ -26,3 +26,499 @@ Final closeout:
 - The fixed 494-byte wire contract correction and stale calibration-sequence rejection are locally verified; they do not remove the live prerequisite failures.
 - The exact remaining prerequisites are an elevated interactive Windows run accepting `-AcceptHostMutation`, a refreshed/restarted current server deployment on `arch-daniel`, and an approved VB-CABLE loopback capture/detection tool.
 - Until those prerequisites exist, the five-minute normal run, 60-second saturated run, and all raw/conservative P50/P95/P99 values remain unexecuted and unclaimed.
+
+---
+
+## 2026-08-23T03:30–03:42+08:00 — resolved live-run failures and authoritative outputs
+
+The first attempts exposed environment/process coordination failures; they are retained here with their exact errors rather than hidden:
+
+```text
+Error: Windows(Calibration(Calibration(RoundTripTooLong { round_trip_us: 148597, maximum_us: 20000 })))
+```
+
+The first saturated attempt, with the large transfer started before calibration, produced:
+
+```text
+calibration sequence=0 round_trip_us=19231 offset_us=552234 error_bound_us=9615 instability_warning=false
+calibration sequence=1 round_trip_us=18970 offset_us=555133 error_bound_us=9485 instability_warning=false
+Error: Windows(Calibration(Calibration(RoundTripTooLong { round_trip_us: 30940, maximum_us: 20000 })))
+```
+
+These were genuine calibration-environment failures: the tool's unchanged calibration gate rejects a sample above its exact 20,000 us maximum. A concurrently running canonical installed client and stale orphaned `parec` processes from other live attempts were also observed and cleaned without changing the Scheduled Task or firewall. The authoritative saturated run started the load only after the diagnostic session was ready, allowing calibration to complete, and then completed with a reading.
+
+Full literal authoritative normal-run output (`wifimic_client.exe --diagnose-latency --duration-secs 300`, 300 samples, empty stderr):
+
+```text
+calibration sequence=0 round_trip_us=2075 offset_us=560579 error_bound_us=1037 instability_warning=false
+calibration sequence=1 round_trip_us=1651 offset_us=560588 error_bound_us=825 instability_warning=false
+calibration sequence=2 round_trip_us=1761 offset_us=560537 error_bound_us=880 instability_warning=false
+calibration sequence=3 round_trip_us=2916 offset_us=560067 error_bound_us=1458 instability_warning=false
+latency_diagnostic endpoint_render="CABLE Input (VB-Audio Virtual Cable)" endpoint_capture="CABLE Output (VB-Audio Virtual Cable)" duration_secs=300
+latency_sample sequence=0 raw_latency_us=206851
+latency_sample sequence=20 raw_latency_us=212642
+latency_sample sequence=40 raw_latency_us=215264
+latency_sample sequence=60 raw_latency_us=205885
+latency_sample sequence=80 raw_latency_us=205611
+latency_sample sequence=100 raw_latency_us=209082
+latency_sample sequence=120 raw_latency_us=215521
+latency_sample sequence=140 raw_latency_us=208267
+latency_sample sequence=160 raw_latency_us=211089
+latency_sample sequence=180 raw_latency_us=215458
+latency_sample sequence=200 raw_latency_us=209752
+latency_sample sequence=220 raw_latency_us=199344
+latency_sample sequence=240 raw_latency_us=212246
+latency_sample sequence=260 raw_latency_us=211891
+latency_sample sequence=280 raw_latency_us=207289
+latency_sample sequence=300 raw_latency_us=213539
+latency_sample sequence=320 raw_latency_us=215120
+latency_sample sequence=340 raw_latency_us=214340
+latency_sample sequence=360 raw_latency_us=211875
+latency_sample sequence=380 raw_latency_us=207538
+latency_sample sequence=400 raw_latency_us=215212
+latency_sample sequence=420 raw_latency_us=211033
+latency_sample sequence=440 raw_latency_us=212061
+latency_sample sequence=460 raw_latency_us=206389
+latency_sample sequence=480 raw_latency_us=210852
+latency_sample sequence=500 raw_latency_us=204264
+latency_sample sequence=520 raw_latency_us=212952
+latency_sample sequence=540 raw_latency_us=209858
+latency_sample sequence=560 raw_latency_us=207810
+latency_sample sequence=580 raw_latency_us=208588
+latency_sample sequence=600 raw_latency_us=210124
+latency_sample sequence=620 raw_latency_us=209664
+latency_sample sequence=640 raw_latency_us=209123
+latency_sample sequence=660 raw_latency_us=205874
+latency_sample sequence=680 raw_latency_us=213773
+latency_sample sequence=700 raw_latency_us=206924
+latency_sample sequence=720 raw_latency_us=206269
+latency_sample sequence=740 raw_latency_us=211247
+latency_sample sequence=760 raw_latency_us=206883
+latency_sample sequence=780 raw_latency_us=215343
+latency_sample sequence=800 raw_latency_us=211767
+latency_sample sequence=820 raw_latency_us=209160
+latency_sample sequence=840 raw_latency_us=205109
+latency_sample sequence=860 raw_latency_us=211015
+latency_sample sequence=880 raw_latency_us=206130
+latency_sample sequence=900 raw_latency_us=208975
+latency_sample sequence=920 raw_latency_us=204729
+latency_sample sequence=940 raw_latency_us=212202
+latency_sample sequence=960 raw_latency_us=205383
+latency_sample sequence=980 raw_latency_us=208957
+latency_sample sequence=1000 raw_latency_us=214396
+latency_sample sequence=1020 raw_latency_us=209829
+latency_sample sequence=1040 raw_latency_us=221800
+latency_sample sequence=1060 raw_latency_us=206203
+latency_sample sequence=1080 raw_latency_us=213543
+latency_sample sequence=1100 raw_latency_us=208816
+latency_sample sequence=1120 raw_latency_us=207166
+latency_sample sequence=1140 raw_latency_us=210951
+latency_sample sequence=1160 raw_latency_us=207594
+latency_sample sequence=1180 raw_latency_us=212787
+latency_sample sequence=1200 raw_latency_us=206310
+latency_sample sequence=1220 raw_latency_us=212791
+latency_sample sequence=1240 raw_latency_us=205139
+latency_sample sequence=1260 raw_latency_us=214950
+latency_sample sequence=1280 raw_latency_us=210777
+latency_sample sequence=1300 raw_latency_us=214378
+latency_sample sequence=1320 raw_latency_us=214114
+latency_sample sequence=1340 raw_latency_us=211295
+latency_sample sequence=1360 raw_latency_us=209148
+latency_sample sequence=1380 raw_latency_us=206346
+latency_sample sequence=1400 raw_latency_us=201503
+latency_sample sequence=1420 raw_latency_us=210971
+latency_sample sequence=1440 raw_latency_us=210127
+latency_sample sequence=1460 raw_latency_us=215025
+latency_sample sequence=1480 raw_latency_us=212790
+latency_sample sequence=1500 raw_latency_us=209709
+latency_sample sequence=1520 raw_latency_us=208932
+latency_sample sequence=1540 raw_latency_us=210451
+latency_sample sequence=1560 raw_latency_us=210445
+latency_sample sequence=1580 raw_latency_us=207159
+latency_sample sequence=1600 raw_latency_us=206044
+latency_sample sequence=1620 raw_latency_us=209072
+latency_sample sequence=1640 raw_latency_us=203555
+latency_sample sequence=1660 raw_latency_us=201640
+latency_sample sequence=1680 raw_latency_us=207428
+latency_sample sequence=1700 raw_latency_us=206546
+latency_sample sequence=1720 raw_latency_us=209693
+latency_sample sequence=1740 raw_latency_us=201819
+latency_sample sequence=1760 raw_latency_us=209480
+latency_sample sequence=1780 raw_latency_us=201450
+latency_sample sequence=1800 raw_latency_us=207810
+latency_sample sequence=1820 raw_latency_us=204962
+latency_sample sequence=1840 raw_latency_us=203013
+latency_sample sequence=1860 raw_latency_us=201052
+latency_sample sequence=1880 raw_latency_us=201111
+latency_sample sequence=1900 raw_latency_us=204783
+latency_sample sequence=1920 raw_latency_us=207876
+latency_sample sequence=1940 raw_latency_us=210038
+latency_sample sequence=1960 raw_latency_us=207985
+latency_sample sequence=1980 raw_latency_us=210389
+latency_sample sequence=2000 raw_latency_us=202098
+latency_sample sequence=2020 raw_latency_us=208224
+latency_sample sequence=2040 raw_latency_us=210198
+latency_sample sequence=2060 raw_latency_us=207318
+latency_sample sequence=2080 raw_latency_us=202141
+latency_sample sequence=2100 raw_latency_us=207902
+latency_sample sequence=2120 raw_latency_us=207216
+latency_sample sequence=2140 raw_latency_us=202377
+latency_sample sequence=2160 raw_latency_us=199880
+latency_sample sequence=2180 raw_latency_us=202109
+latency_sample sequence=2200 raw_latency_us=201249
+latency_sample sequence=2220 raw_latency_us=208698
+latency_sample sequence=2240 raw_latency_us=209992
+latency_sample sequence=2260 raw_latency_us=208518
+latency_sample sequence=2280 raw_latency_us=201680
+latency_sample sequence=2300 raw_latency_us=201325
+latency_sample sequence=2320 raw_latency_us=200470
+latency_sample sequence=2340 raw_latency_us=206593
+latency_sample sequence=2360 raw_latency_us=201800
+latency_sample sequence=2380 raw_latency_us=206601
+latency_sample sequence=2400 raw_latency_us=207349
+latency_sample sequence=2420 raw_latency_us=203181
+latency_sample sequence=2440 raw_latency_us=200578
+latency_sample sequence=2460 raw_latency_us=207562
+latency_sample sequence=2480 raw_latency_us=200821
+latency_sample sequence=2500 raw_latency_us=206956
+latency_sample sequence=2520 raw_latency_us=214866
+latency_sample sequence=2540 raw_latency_us=204278
+latency_sample sequence=2560 raw_latency_us=209283
+latency_sample sequence=2580 raw_latency_us=208456
+latency_sample sequence=2600 raw_latency_us=201162
+latency_sample sequence=2620 raw_latency_us=205411
+latency_sample sequence=2640 raw_latency_us=209301
+latency_sample sequence=2660 raw_latency_us=209632
+latency_sample sequence=2680 raw_latency_us=202002
+latency_sample sequence=2700 raw_latency_us=200870
+latency_sample sequence=2720 raw_latency_us=206095
+latency_sample sequence=2740 raw_latency_us=203399
+latency_sample sequence=2760 raw_latency_us=210479
+latency_sample sequence=2780 raw_latency_us=209235
+latency_sample sequence=2800 raw_latency_us=206379
+latency_sample sequence=2820 raw_latency_us=202631
+latency_sample sequence=2840 raw_latency_us=203803
+latency_sample sequence=2860 raw_latency_us=210650
+latency_sample sequence=2880 raw_latency_us=204499
+latency_sample sequence=2900 raw_latency_us=203851
+latency_sample sequence=2920 raw_latency_us=200102
+latency_sample sequence=2940 raw_latency_us=205220
+latency_sample sequence=2960 raw_latency_us=207012
+latency_sample sequence=2980 raw_latency_us=206172
+latency_sample sequence=3000 raw_latency_us=204298
+latency_sample sequence=3020 raw_latency_us=202275
+latency_sample sequence=3040 raw_latency_us=206645
+latency_sample sequence=3060 raw_latency_us=203898
+latency_sample sequence=3080 raw_latency_us=204818
+latency_sample sequence=3100 raw_latency_us=200959
+latency_sample sequence=3120 raw_latency_us=200737
+latency_sample sequence=3140 raw_latency_us=203541
+latency_sample sequence=3160 raw_latency_us=206965
+latency_sample sequence=3180 raw_latency_us=201326
+latency_sample sequence=3200 raw_latency_us=208394
+latency_sample sequence=3220 raw_latency_us=206321
+latency_sample sequence=3240 raw_latency_us=203541
+latency_sample sequence=3260 raw_latency_us=201024
+latency_sample sequence=3280 raw_latency_us=208910
+latency_sample sequence=3300 raw_latency_us=206128
+latency_sample sequence=3320 raw_latency_us=204031
+latency_sample sequence=3340 raw_latency_us=209735
+latency_sample sequence=3360 raw_latency_us=204632
+latency_sample sequence=3380 raw_latency_us=209261
+latency_sample sequence=3400 raw_latency_us=202360
+latency_sample sequence=3420 raw_latency_us=203315
+latency_sample sequence=3440 raw_latency_us=207547
+latency_sample sequence=3460 raw_latency_us=204668
+latency_sample sequence=3480 raw_latency_us=202270
+latency_sample sequence=3500 raw_latency_us=204389
+latency_sample sequence=3520 raw_latency_us=205805
+latency_sample sequence=3540 raw_latency_us=202821
+latency_sample sequence=3560 raw_latency_us=206771
+latency_sample sequence=3580 raw_latency_us=207304
+latency_sample sequence=3600 raw_latency_us=204690
+latency_sample sequence=3620 raw_latency_us=206584
+latency_sample sequence=3640 raw_latency_us=209124
+latency_sample sequence=3660 raw_latency_us=208369
+latency_sample sequence=3680 raw_latency_us=208432
+latency_sample sequence=3700 raw_latency_us=208285
+latency_sample sequence=3720 raw_latency_us=204608
+latency_sample sequence=3740 raw_latency_us=201766
+latency_sample sequence=3760 raw_latency_us=201142
+latency_sample sequence=3780 raw_latency_us=206091
+latency_sample sequence=3800 raw_latency_us=203360
+latency_sample sequence=3820 raw_latency_us=206840
+latency_sample sequence=3840 raw_latency_us=209737
+latency_sample sequence=3860 raw_latency_us=208557
+latency_sample sequence=3880 raw_latency_us=205736
+latency_sample sequence=3900 raw_latency_us=208373
+latency_sample sequence=3920 raw_latency_us=207934
+latency_sample sequence=3940 raw_latency_us=209846
+latency_sample sequence=3960 raw_latency_us=200108
+latency_sample sequence=3980 raw_latency_us=207352
+latency_sample sequence=4000 raw_latency_us=206278
+latency_sample sequence=4020 raw_latency_us=201254
+latency_sample sequence=4040 raw_latency_us=203099
+latency_sample sequence=4060 raw_latency_us=203692
+latency_sample sequence=4080 raw_latency_us=200418
+latency_sample sequence=4100 raw_latency_us=205034
+latency_sample sequence=4120 raw_latency_us=202758
+latency_sample sequence=4140 raw_latency_us=209460
+latency_sample sequence=4160 raw_latency_us=207899
+latency_sample sequence=4180 raw_latency_us=205407
+latency_sample sequence=4200 raw_latency_us=203507
+latency_sample sequence=4220 raw_latency_us=200658
+latency_sample sequence=4240 raw_latency_us=201294
+latency_sample sequence=4260 raw_latency_us=203335
+latency_sample sequence=4280 raw_latency_us=200658
+latency_sample sequence=4300 raw_latency_us=209635
+latency_sample sequence=4320 raw_latency_us=209594
+latency_sample sequence=4340 raw_latency_us=200675
+latency_sample sequence=4360 raw_latency_us=203180
+latency_sample sequence=4380 raw_latency_us=211149
+latency_sample sequence=4400 raw_latency_us=202946
+latency_sample sequence=4420 raw_latency_us=206496
+latency_sample sequence=4440 raw_latency_us=207838
+latency_sample sequence=4460 raw_latency_us=208414
+latency_sample sequence=4480 raw_latency_us=201968
+latency_sample sequence=4500 raw_latency_us=203913
+latency_sample sequence=4520 raw_latency_us=203976
+latency_sample sequence=4540 raw_latency_us=200783
+latency_sample sequence=4560 raw_latency_us=207007
+latency_sample sequence=4580 raw_latency_us=203083
+latency_sample sequence=4600 raw_latency_us=200628
+latency_sample sequence=4620 raw_latency_us=201761
+latency_sample sequence=4640 raw_latency_us=207043
+latency_sample sequence=4660 raw_latency_us=203014
+latency_sample sequence=4680 raw_latency_us=201407
+latency_sample sequence=4700 raw_latency_us=200853
+latency_sample sequence=4720 raw_latency_us=211060
+latency_sample sequence=4740 raw_latency_us=203302
+latency_sample sequence=4760 raw_latency_us=209934
+latency_sample sequence=4780 raw_latency_us=207435
+latency_sample sequence=4800 raw_latency_us=209250
+latency_sample sequence=4820 raw_latency_us=207494
+latency_sample sequence=4840 raw_latency_us=203648
+latency_sample sequence=4860 raw_latency_us=205599
+latency_sample sequence=4880 raw_latency_us=203718
+latency_sample sequence=4900 raw_latency_us=201526
+latency_sample sequence=4920 raw_latency_us=207944
+latency_sample sequence=4940 raw_latency_us=205882
+latency_sample sequence=4960 raw_latency_us=201980
+latency_sample sequence=4980 raw_latency_us=199117
+latency_sample sequence=5000 raw_latency_us=204921
+latency_sample sequence=5020 raw_latency_us=204365
+latency_sample sequence=5040 raw_latency_us=204677
+latency_sample sequence=5060 raw_latency_us=206549
+latency_sample sequence=5080 raw_latency_us=206307
+latency_sample sequence=5100 raw_latency_us=208546
+latency_sample sequence=5120 raw_latency_us=208276
+latency_sample sequence=5140 raw_latency_us=203136
+latency_sample sequence=5160 raw_latency_us=201343
+latency_sample sequence=5180 raw_latency_us=200318
+latency_sample sequence=5200 raw_latency_us=204198
+latency_sample sequence=5220 raw_latency_us=209706
+latency_sample sequence=5240 raw_latency_us=201100
+latency_sample sequence=5260 raw_latency_us=205591
+latency_sample sequence=5280 raw_latency_us=209273
+latency_sample sequence=5300 raw_latency_us=209117
+latency_sample sequence=5320 raw_latency_us=202379
+latency_sample sequence=5340 raw_latency_us=207799
+latency_sample sequence=5360 raw_latency_us=202329
+latency_sample sequence=5380 raw_latency_us=209013
+latency_sample sequence=5400 raw_latency_us=204840
+latency_sample sequence=5420 raw_latency_us=203337
+latency_sample sequence=5440 raw_latency_us=202080
+latency_sample sequence=5460 raw_latency_us=200800
+latency_sample sequence=5480 raw_latency_us=200973
+latency_sample sequence=5500 raw_latency_us=207215
+latency_sample sequence=5520 raw_latency_us=205130
+latency_sample sequence=5540 raw_latency_us=207348
+latency_sample sequence=5560 raw_latency_us=203443
+latency_sample sequence=5580 raw_latency_us=202458
+latency_sample sequence=5600 raw_latency_us=205731
+latency_sample sequence=5620 raw_latency_us=201633
+latency_sample sequence=5640 raw_latency_us=208472
+latency_sample sequence=5660 raw_latency_us=205772
+latency_sample sequence=5680 raw_latency_us=202582
+latency_sample sequence=5700 raw_latency_us=208766
+latency_sample sequence=5720 raw_latency_us=201570
+latency_sample sequence=5740 raw_latency_us=200949
+latency_sample sequence=5760 raw_latency_us=213655
+latency_sample sequence=5780 raw_latency_us=207693
+latency_sample sequence=5800 raw_latency_us=203670
+latency_sample sequence=5820 raw_latency_us=210223
+latency_sample sequence=5840 raw_latency_us=207126
+latency_sample sequence=5860 raw_latency_us=211143
+latency_sample sequence=5880 raw_latency_us=210136
+latency_sample sequence=5900 raw_latency_us=210864
+latency_sample sequence=5920 raw_latency_us=210068
+latency_sample sequence=5940 raw_latency_us=205883
+latency_sample sequence=5960 raw_latency_us=212867
+latency_stats raw_p50_us=206593 raw_p95_us=213773 raw_p99_us=215458 conservative_p95_us=238773 conservative_p95_margin_us=25000
+```
+
+Full literal authoritative saturated-run output (`wifimic_client.exe --diagnose-latency --duration-secs 60`, 60 samples, empty stderr):
+
+```text
+calibration sequence=0 round_trip_us=4639 offset_us=559313 error_bound_us=2319 instability_warning=false
+calibration sequence=1 round_trip_us=2940 offset_us=559989 error_bound_us=1470 instability_warning=false
+calibration sequence=2 round_trip_us=1682 offset_us=560598 error_bound_us=841 instability_warning=false
+calibration sequence=3 round_trip_us=2817 offset_us=560019 error_bound_us=1408 instability_warning=false
+latency_diagnostic endpoint_render="CABLE Input (VB-Audio Virtual Cable)" endpoint_capture="CABLE Output (VB-Audio Virtual Cable)" duration_secs=60
+latency_sample sequence=0 raw_latency_us=210027
+latency_sample sequence=20 raw_latency_us=207764
+latency_sample sequence=40 raw_latency_us=209322
+latency_sample sequence=60 raw_latency_us=205929
+latency_sample sequence=80 raw_latency_us=211677
+latency_sample sequence=100 raw_latency_us=206149
+latency_sample sequence=120 raw_latency_us=214550
+latency_sample sequence=140 raw_latency_us=212568
+latency_sample sequence=160 raw_latency_us=211571
+latency_sample sequence=180 raw_latency_us=209317
+latency_sample sequence=200 raw_latency_us=215738
+latency_sample sequence=220 raw_latency_us=209411
+latency_sample sequence=240 raw_latency_us=211647
+latency_sample sequence=260 raw_latency_us=206011
+latency_sample sequence=280 raw_latency_us=210446
+latency_sample sequence=300 raw_latency_us=207105
+latency_sample sequence=320 raw_latency_us=204067
+latency_sample sequence=340 raw_latency_us=205840
+latency_sample sequence=360 raw_latency_us=209512
+latency_sample sequence=380 raw_latency_us=207075
+latency_sample sequence=400 raw_latency_us=211162
+latency_sample sequence=420 raw_latency_us=206490
+latency_sample sequence=440 raw_latency_us=207500
+latency_sample sequence=460 raw_latency_us=213928
+latency_sample sequence=480 raw_latency_us=207404
+latency_sample sequence=500 raw_latency_us=208196
+latency_sample sequence=520 raw_latency_us=215695
+latency_sample sequence=540 raw_latency_us=214069
+latency_sample sequence=560 raw_latency_us=209199
+latency_sample sequence=580 raw_latency_us=206332
+latency_sample sequence=600 raw_latency_us=209782
+latency_sample sequence=620 raw_latency_us=211684
+latency_sample sequence=640 raw_latency_us=209322
+latency_sample sequence=660 raw_latency_us=215553
+latency_sample sequence=680 raw_latency_us=208114
+latency_sample sequence=700 raw_latency_us=212262
+latency_sample sequence=720 raw_latency_us=204564
+latency_sample sequence=740 raw_latency_us=210925
+latency_sample sequence=760 raw_latency_us=210699
+latency_sample sequence=780 raw_latency_us=213384
+latency_sample sequence=800 raw_latency_us=207885
+latency_sample sequence=820 raw_latency_us=207728
+latency_sample sequence=840 raw_latency_us=209251
+latency_sample sequence=860 raw_latency_us=213158
+latency_sample sequence=880 raw_latency_us=205960
+latency_sample sequence=900 raw_latency_us=212971
+latency_sample sequence=920 raw_latency_us=208700
+latency_sample sequence=940 raw_latency_us=211817
+latency_sample sequence=960 raw_latency_us=211974
+latency_sample sequence=980 raw_latency_us=211940
+latency_sample sequence=1000 raw_latency_us=216118
+latency_sample sequence=1020 raw_latency_us=205517
+latency_sample sequence=1040 raw_latency_us=211400
+latency_sample sequence=1060 raw_latency_us=204775
+latency_sample sequence=1080 raw_latency_us=211195
+latency_sample sequence=1100 raw_latency_us=208452
+latency_sample sequence=1120 raw_latency_us=209583
+latency_sample sequence=1140 raw_latency_us=207036
+latency_sample sequence=1160 raw_latency_us=211531
+latency_sample sequence=1180 raw_latency_us=205113
+latency_stats raw_p50_us=209411 raw_p95_us=215553 raw_p99_us=216118 conservative_p95_us=240553 conservative_p95_margin_us=25000
+```
+
+Methodology and cleanup conclusions:
+- The native diagnostic measures calibrated WASAPI-render-to-WASAPI-capture loopback latency translated to Linux time by the existing NTP-style calibration. This is defensible practical end-to-end audio-path evidence, but not literally the plan's Linux `parec`/`CaptureAdapter` frame-acquisition timestamp to Windows VB-CABLE render-boundary definition because the immutable 494-byte wire contract carries no Linux capture timestamp. It must be judged by F1/F3 as either a defensible M19 Scope interpretation or a partial/characterization result.
+- The saturated tool output cannot prove the plan's zero-sustained-underrun-bursts-longer-than-one-second criterion because it does not expose `wifimic_diagnostics` jitter-buffer event counts.
+- Final receipt at `2026-08-23T03:43:13+08:00`: no client process, no local UDP 6902 endpoint, no transfer SSH process, no remote `parec`; `wifimic-server` remained `active` at PID `38464`, UDP 6902 remained listening, and the pinned source was `SUSPENDED`. The server journal records explicit stops for both authoritative sessions.
+
+--- 2026-08-23T04:53:00+08:00 corrected real-capture Todo 20 live attempt failure ---
+Deployment completed from exact 1d7de3eed653086efef5bff2896b79316cb57221; installed server SHA-256 dffb24117ba9167d36ebd5e01cb396fcacb634fb194b620f534deb6a418e7c26; mtime 2026-08-23 04:42:43.995428402 +0800.
+Normal invocation: fresh client from exact 1d7de3e ran --diagnose-latency --duration-secs 300. Calibration and Start/session succeeded, but the first measure_tone call returned Windows(ToneOnsetTimeout { timeout_ms: 250 }). The command therefore did not run for 300 seconds and emitted zero latency_onset lines.
+Normal Linux side did run the real pinned capture: 5994 latency_capture lines, sequences 0 through 5993; the watcher recorded PID 39335 with the exact parec --device=alsa_input.pci-0000_00_1b.0.analog-stereo arguments. No client onset sequence existed to match.
+Saturated invocation: a 4 GiB ssh arch-daniel dd if=/dev/urandom bs=1M count=4096 transfer job was Running before fresh client --diagnose-latency --duration-secs 60. Calibration then failed with RoundTripTooLong { round_trip_us: 22492, maximum_us: 20000 }; no latency_onset or latency_capture records were produced. The transfer and its ssh processes were terminated; no 60-second characterization exists.
+No raw latency percentiles are reported for either attempt: 0 client onset records and 0 matched sequence pairs. It would be fabricated to derive P50/P95/P99 from capture-only or calibration samples.
+Post-cleanup: no diagnostic server, no exact parec, no transfer ssh, normal wifimic-server active on UDP 6902, pinned source SUSPENDED.
+### NORMAL CLIENT ERROR OUTPUT
+calibration sequence=0 round_trip_us=1873 offset_us=516589 error_bound_us=936 instability_warning=false
+calibration sequence=1 round_trip_us=1635 offset_us=516553 error_bound_us=817 instability_warning=false
+calibration sequence=2 round_trip_us=1667 offset_us=516632 error_bound_us=833 instability_warning=false
+calibration sequence=3 round_trip_us=2041 offset_us=516480 error_bound_us=1020 instability_warning=false
+latency_diagnostic endpoint_render="CABLE Input (VB-Audio Virtual Cable)" endpoint_capture="CABLE Output (VB-Audio Virtual Cable)" duration_secs=300
+wifimic_client.exe : Error: Windows(ToneOnsetTimeout { timeout_ms: 250 })
+位於 線路:1 字元:265
++ ... t -Force }; & $client --diagnose-latency --duration-secs 300 2>&1 | T ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Error: Windows(...eout_ms: 250 }):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+### SATURATED CLIENT ERROR OUTPUT
+calibration sequence=0 round_trip_us=18635 offset_us=510704 error_bound_us=9317 instability_warning=false
+calibration sequence=1 round_trip_us=19242 offset_us=514258 error_bound_us=9621 instability_warning=false
+calibration sequence=2 round_trip_us=16094 offset_us=513673 error_bound_us=8047 instability_warning=false
+wifimic_client.exe : Error: Windows(Calibration(Calibration(RoundTripTooLong { round_trip_us: 22492, maximum_us: 20000 
+})))
+位於 線路:1 字元:438
++ ... er.State)"; & $client --diagnose-latency --duration-secs 60 2>&1 | Te ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Error: Windows(..._us: 20000 }))):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+--- CORRECTION appended 2026-08-23T04:55:00+08:00 ---
+Correct installed server SHA-256 from final remote verification: ddfb24117ba9167d36ebd5e01cb396fcacb634fb194b620f534deb6a418e7c26. Earlier dffb... text was a transcription typo only.
+
+===== SATURATED 60s attempt 2026-08-23T05:51:25.9703119+08:00 =====
+transfer=4GiB /dev/urandom SSH stream; tone link verified active before client
+client_exit=
+client_stdout:
+calibration sequence=0 round_trip_us=2617 offset_us=511530 error_bound_us=1308 instability_warning=false
+calibration sequence=1 round_trip_us=2967 offset_us=511793 error_bound_us=1483 instability_warning=false
+calibration sequence=2 round_trip_us=3422 offset_us=511450 error_bound_us=1711 instability_warning=false
+calibration sequence=3 round_trip_us=2869 offset_us=511224 error_bound_us=1434 instability_warning=false
+latency_diagnostic endpoint_render="CABLE Input (VB-Audio Virtual Cable)" endpoint_capture="CABLE Output (VB-Audio Virtual Cable)" duration_secs=60
+latency_onset sequence=0 client_onset_us=1787435486838886 server_onset_us=1787435487350110 clock_offset_us=511224
+latency_onset sequence=89 client_onset_us=1787435487712813 server_onset_us=1787435488224037 clock_offset_us=511224
+latency_onset sequence=190 client_onset_us=1787435488732452 server_onset_us=1787435489243676 clock_offset_us=511224
+
+client_stderr:
+Error: Windows(NoRenderedToneFrame)
+
+===== SATURATED attempt end 2026-08-23T05:51:49.8966610+08:00 =====
+
+===== SATURATED VALID-TRANSFER attempt 2026-08-23T05:53:35.4735452+08:00 =====
+transfer_job_state=Running
+remote_dd=
+client_exit=
+client_stdout:
+calibration sequence=0 round_trip_us=19176 offset_us=503727 error_bound_us=9588 instability_warning=false
+calibration sequence=1 round_trip_us=19540 offset_us=502407 error_bound_us=9770 instability_warning=false
+calibration sequence=2 round_trip_us=19452 offset_us=504666 error_bound_us=9726 instability_warning=false
+calibration sequence=3 round_trip_us=19358 offset_us=507538 error_bound_us=9679 instability_warning=false
+latency_diagnostic endpoint_render="CABLE Input (VB-Audio Virtual Cable)" endpoint_capture="CABLE Output (VB-Audio Virtual Cable)" duration_secs=60
+
+client_stderr:
+Error: Windows(ToneOnsetTimeout { timeout_ms: 250 })
+
+===== SATURATED VALID-TRANSFER attempt end 2026-08-23T05:54:01.4331163+08:00 =====
+
+===== Partial matched-pair calculation (non-acceptance debug run) =====
+source=short saturated attempt without valid transfer; client onset records=3; Linux capture records=6000; matched=3
+sequence=0 raw_latency_us=147764
+sequence=89 raw_latency_us=573748
+sequence=190 raw_latency_us=1086731
+partial_raw_p50_us=573748 partial_raw_p95_us=1086731 partial_raw_p99_us=1086731 partial_conservative_p95_us=1111731
+interpretation=not a 300s normal run or valid 60s saturated characterization; no acceptance percentile claimed
+
+===== Final live diagnostic verdict =====
+normal_300s=BLOCKED: all authoritative invocations ended before full duration with ToneOnsetTimeout or NoRenderedToneFrame; no full-run latency percentiles claimed
+saturated_60s_valid_transfer=BLOCKED: calibration completed under 4GiB SSH load (accepted RTTs 19176,19540,19452,19358 us) but first measurement ended ToneOnsetTimeout; no 60s characterization claimed
+linux_udp_payload_probe=PASS for path isolation: 1594 audio frames, 1593 non-silent, max_abs roughly 3,500-7,400
+pipewire_topology=the pinned source has capture_FL/FR output ports and input ports 0/0; direct pw-play->alsa_input capture link is impossible, so verified injection used pw-play->live parec input ports while original pinned-source links remained
+
+===== 2026-08-23 exact-334b3f5 normal attempt — INVALID TONE LINK MONITOR =====
+Build/run binary: detached worktree exact HEAD 334b3f5dfd64a682867bd57d6935e5f3987098e0; Windows build SHA-256 3030D1D31AA5EEC78A714AF1F6AFED3A0C4BE2B964E74F5469BF3AAB054A9EB5; Program Files replacement was blocked by non-elevated PowerShell and was not trusted for this run.
+Client error: Windows(ToneOnsetTimeout { timeout_ms: 250 }); no latency_onset lines; run incomplete.
+Root cause of this attempt's invalidity: the monitor detected any pw-play output link (including automatic pw-play -> alsa_output speaker links) instead of specifically pw-play:output_FL/FR -> parec:input_FL/FR, so the required tone-to-parec links were never established.
+This attempt is not a Todo 20 characterization and contributes no latency statistics.

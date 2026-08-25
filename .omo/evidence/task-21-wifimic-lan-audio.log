@@ -1,0 +1,465 @@
+# Todo 21 — real tray Exit/Restart lifecycle acceptance
+# Captured 2026-08-22 from C:\Users\Daniel\Documents\opencode\wifimic.
+# Outcome: BLOCKED during read-only preflight; no lifecycle mutation was attempted.
+
+## Required acceptance contract
+
+Todo 21 requires the real installed Windows tray client and canonical Scheduled Task
+`\wifimic\wifimic-client`, plus the active Linux service. The ordered run must observe:
+streaming active -> Exit clicked -> Linux `Idle` within 2 seconds -> Windows process exited
+-> task still `Ready` -> next logon -> auto-start -> streaming resumed within 10 seconds.
+The failure-path run must observe mid-session Restart keeping the process/task alive and
+producing a strictly greater session ID within 10 seconds.
+
+## Read-only preflight
+
+No tray UI driver or task-control command was run because the required installed artifacts
+were absent. No task, executable, firewall rule, process, logon, or remote service state was
+created, removed, restarted, or otherwise mutated.
+
+### Windows PowerShell 5.1 command
+
+```powershell
+powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "`$ErrorActionPreference='Continue'; `$stamp=Get-Date -Format o; Write-Output ('PREFLIGHT_LOCAL_TIMESTAMP='+`$stamp); Write-Output ('WINDOWS_HOST='+`$env:COMPUTERNAME); Write-Output 'WINDOWS_IDENTITY='; whoami.exe; `$task=@(Get-ScheduledTask -TaskPath '\wifimic\' -TaskName 'wifimic-client' -ErrorAction SilentlyContinue); if(`$task.Count -eq 0){Write-Output 'TASK_\wifimic\wifimic-client=ABSENT'} else {Write-Output 'TASK_\wifimic\wifimic-client=PRESENT'; `$task | Format-List TaskName,TaskPath,State,Principal,Actions; Get-ScheduledTaskInfo -TaskPath '\wifimic\' -TaskName 'wifimic-client' | Format-List LastRunTime,LastTaskResult,NextRunTime,NumberOfMissedRuns}; `$install='C:\Program Files\wifimic-client'; Write-Output ('INSTALL_ROOT_EXISTS='+ (Test-Path -LiteralPath `$install)); if(Test-Path -LiteralPath `$install){Get-ChildItem -LiteralPath `$install -Force | Format-Table Name,Length,LastWriteTime,FullName} else {Write-Output 'INSTALL_ROOT=ABSENT'}; `$processes=@(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {`$_.Name -eq 'wifimic_client.exe'}); if(`$processes.Count -eq 0){Write-Output 'CLIENT_PROCESS_wifimic_client.exe=ABSENT'} else {`$processes | Format-List Name,ProcessId,ExecutablePath,CommandLine}; `$alt=@(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {`$_.Name -eq 'wifimic-client.exe'}); if(`$alt.Count -eq 0){Write-Output 'CLIENT_PROCESS_wifimic-client.exe=ABSENT'} else {`$alt | Format-List Name,ProcessId,ExecutablePath,CommandLine}; Write-Output 'VB_CABLE_DEVICES='; Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue | Where-Object {`$_.FriendlyName -like '*VB-Audio*' -or `$_.FriendlyName -like '*CABLE*'} | Format-Table Status,Class,FriendlyName,InstanceId"
+```
+
+Raw output:
+
+```text
+PREFLIGHT_LOCAL_TIMESTAMP=2026-08-22T21:19:47.4240146+08:00
+WINDOWS_HOST=DANIEL-GIGABYTE
+WINDOWS_IDENTITY=
+daniel-gigabyte\daniel
+TASK_\wifimic\wifimic-client=ABSENT
+INSTALL_ROOT_EXISTS=False
+INSTALL_ROOT=ABSENT
+CLIENT_PROCESS_wifimic_client.exe=ABSENT
+CLIENT_PROCESS_wifimic-client.exe=ABSENT
+VB_CABLE_DEVICES=
+
+Status Class         FriendlyName                          InstanceId
+------ -----         ------------                          ----------
+OK     AudioEndpoint CABLE Output (VB-Audio Virtual Cable) SWD\MMDEVAPI\{0.0.1.00000000}.{D0FA961D-580D-48A2-A5FB-AA...
+OK     AudioEndpoint CABLE Input (VB-Audio Virtual Cable)  SWD\MMDEVAPI\{0.0.0.00000000}.{000BE2AB-BF34-4E6C-B778-A4...
+OK     MEDIA         VB-Audio Virtual Cable                ROOT\MEDIA\0000
+```
+
+### Linux SSH command
+
+```text
+ssh -o BatchMode=yes -o ConnectionAttempts=1 -o ConnectTimeout=5 -o ServerAliveInterval=2 -o ServerAliveCountMax=2 arch-daniel "printf 'PREFLIGHT_REMOTE_TIMESTAMP='; date --iso-8601=ns; printf 'REMOTE_HOST='; uname -n; printf 'SERVICE_ACTIVE='; systemctl --user is-active wifimic-server; systemctl --user show wifimic-server -p ActiveState -p SubState -p MainPID -p ExecStart -p FragmentPath; printf 'LISTENER_6902='; ss -lunp | grep -E '(:6902[[:space:]]|:6902$)' || true; printf 'BINARY_STAT='; stat -c '%n|%y|%s' /home/daniel/.local/bin/wifimic_server; printf 'BINARY_SHA256='; sha256sum /home/daniel/.local/bin/wifimic_server; printf 'REMOTE_PROCESS='; pgrep -a -x wifimic_server || true"
+```
+
+Raw output:
+
+```text
+PREFLIGHT_REMOTE_TIMESTAMP=2026-08-22T21:20:37,302525414+08:00
+REMOTE_HOST=arch-daniel
+SERVICE_ACTIVE=active
+ActiveState=active
+SubState=running
+FragmentPath=/home/daniel/.config/systemd/user/wifimic-server.service
+MainPID=33601
+ExecStart={ path=/home/daniel/.local/bin/wifimic_server ; argv[]=/home/daniel/.local/bin/wifimic_server ; ignore_errors=no ; start_time=[Sat 2026-08-22 16:45:01 CST] ; stop_time=[n/a] ; pid=33601 ; code=(null) ; status=0/0 }
+LISTENER_6902=UNCONN 0      0            0.0.0.0:6902       0.0.0.0:*    users:(("wifimic_server",pid=33601,fd=3))
+BINARY_STAT=/home/daniel/.local/bin/wifimic_server|2026-08-22 16:44:50.539301747 +0800|450624
+BINARY_SHA256=0f7b8036f0e75fe190a30caa11fae51f4cc8c567f18d271572ca4f60c5eab221  /home/daniel/.local/bin/wifimic_server
+REMOTE_PROCESS=33601 /home/daniel/.local/bin/wifimic_server
+```
+
+## Acceptance results
+
+The following are acceptance results, not claims about the read-only facts above:
+
+- **FAIL — streaming active:** no exact installed `wifimic_client.exe` process or task existed, so streaming was not observed.
+- **FAIL — Exit clicked:** not attempted; there was no real tray client.
+- **FAIL — Linux Idle within 2 seconds of Exit:** no Exit transition occurred and no Idle timestamp was observed.
+- **FAIL — Windows process exited:** no process-exit transition was observed; the exact process identity was already absent at preflight.
+- **FAIL — Scheduled Task remains `Ready`:** the exact canonical task was absent, so `Ready` was not observed.
+- **FAIL — next logon / `LogonTrigger`:** no canonical task existed to trigger; user logout was not attempted.
+- **FAIL — client auto-started:** no real relogon-triggered start was observed.
+- **FAIL — streaming resumed within 10 seconds of the new Start:** no new Start or Ack was observed.
+- **FAIL — mid-session Restart keeps process and task alive:** no mid-session client existed and no Restart was attempted.
+- **FAIL — Restart emits a strictly greater `session_id` within 10 seconds:** no real session IDs were observed.
+
+The Linux service/listener preflight is a factual **PASS** (`active`, PID 33601, UDP
+`0.0.0.0:6902`), but it does not satisfy Todo 21 without the Windows artifacts. The binary
+mtime is `2026-08-22 16:44:50 +0800`; prior Todo 19 evidence identifies this active ELF as
+stale relative to the current control-loop deployment. No rebuild/install/restart was
+performed.
+
+## Stop decision
+
+The required Windows task, Program Files install, and exact client process are absent. Host
+mutation is not authorized by this task, and the prescribed reversible live scenario cannot
+be made truthful by installing or registering those artifacts. The acceptance run stopped at
+preflight; Todo 21 remains unchecked and no Todo 21 commit was created.
+
+---
+
+## Live acceptance rerun — 2026-08-23
+
+Outcome: **FAIL/BLOCKED at the native tray interaction gate**. The installed artifacts and
+refreshed Linux service were present. The canonical task was started twice and real capture was
+observed, but no real Restart or Exit menu action could be performed from this Windows session.
+No unit seam, mock, debug binary, or stale 64-byte helper was used as a lifecycle pass.
+
+### Read-only preflight
+
+PowerShell 5.1 command (identities and exact action inspection):
+
+```powershell
+$task=@(Get-ScheduledTask -TaskPath '\\wifimic\\' -TaskName 'wifimic-client'); Get-ScheduledTaskInfo -TaskPath '\\wifimic\\' -TaskName 'wifimic-client'; Get-CimInstance Win32_Process -Filter "Name='wifimic_client.exe'"; Get-NetUDPEndpoint -LocalPort 6902; Get-PnpDevice -Class AudioEndpoint -Status OK | Where-Object FriendlyName -eq 'CABLE Input (VB-Audio Virtual Cable)'
+```
+
+Raw result at `2026-08-23T01:22:42.4248481+08:00`:
+
+```text
+TASK=PRESENT
+TaskPath : \wifimic\
+TaskName : wifimic-client
+State    : Ready
+EXE_EXISTS=True
+FullName : C:\Program Files\wifimic-client\wifimic_client.exe
+Length   : 2143374
+CLIENT_PROCESSES=ABSENT
+VB-CABLE Input (VB-Audio Virtual Cable)=OK
+UIAUTOMATION_ASSEMBLY=AVAILABLE
+PYWINAUTO=UNAVAILABLE
+PYWIN32=UNAVAILABLE
+```
+
+Exact task action inspection returned:
+
+```text
+Execute          : C:\Program Files\wifimic-client\wifimic_client.exe
+Arguments        :
+WorkingDirectory : C:\Program Files\wifimic-client
+```
+
+Linux SSH command:
+
+```text
+ssh ... arch-daniel "systemctl --user is-active wifimic-server; systemctl --user show wifimic-server -p MainPID; ss -lunp | grep 6902; pgrep -a -x parec; pactl list short sources | grep alsa_input.pci-0000_00_1b.0.analog-stereo"
+```
+
+Raw result at `2026-08-23T01:22:43,230658710+08:00`:
+
+```text
+SERVICE_ACTIVE=active
+MainPID=35138
+LISTENER_6902=UNCONN 0 0 0.0.0.0:6902 0.0.0.0:* users:(('wifimic_server',pid=35138,fd=3))
+CAPTURE_SOURCE=57 alsa_input.pci-0000_00_1b.0.analog-stereo PipeWire s32le 2ch 48000Hz SUSPENDED
+```
+
+### Canonical task start and live capture
+
+Command:
+
+```powershell
+schtasks.exe /Run /TN '\\wifimic\\wifimic-client'
+```
+
+Raw result:
+
+```text
+START_COMMAND_TIMESTAMP=2026-08-23T01:23:36.1636143+08:00
+START_COMMAND_EXIT=0
+POLL_TIMESTAMP=2026-08-23T01:23:53.6541735+08:00 TASK_STATE=Running TASK_ENABLED=True TASK_LASTRESULT=267009 PROCESS_COUNT=1
+PROCESS PID=31360 EXE=C:\Program Files\wifimic-client\wifimic_client.exe CMD="C:\Program Files\wifimic-client\wifimic_client.exe"
+UDP_ENDPOINT LocalAddress=0.0.0.0 LocalPort=6902 OwningProcess=31360
+```
+
+Remote observation at `2026-08-23T01:23:54,492606646+08:00`:
+
+```text
+SERVICE=active
+SERVER_PID=35138
+PAREC=35297 parec --raw --format=s16le --rate=48000 --channels=1 --latency-msec=5 --process-time-msec=5 --device=alsa_input.pci-0000_00_1b.0.analog-stereo
+CAPTURE_SOURCE=57 alsa_input.pci-0000_00_1b.0.analog-stereo PipeWire s32le 2ch 48000Hz RUNNING
+```
+
+This proves the canonical task launched the installed process and Linux capture became active.
+It does **not** prove a Start Ack because the running client consumed the UDP response and the
+production diagnostic files contained only their headers:
+
+```text
+C:\Users\Daniel\AppData\Local\wifimic-client\logs\diagnostics-1787419416.log
+wifimic-diagnostics-v1 created_at_unix_secs=1787419416
+```
+
+### Native tray interaction blocker
+
+The documented/native implementation was used as the selection basis: `TrayRuntime` creates the
+real `Restart` and `Exit` menu items, and `main.rs` polls `NativeMenuEvent::receiver()` on the
+tray loop. The available native paths were then checked against the live PID 31360 tray window:
+
+```text
+tray_icon_app HWND=4524692 PID=31360
+Shell_NotifyIconGetRect UID=2 RECT=3378,2088,3426,2160 HRESULT=0
+UIA_EXACT_NAME_COUNT=0
+UIA_SUBSTRING_COUNT=0
+SetCursorPos(2268,1416) -> False, Win32Error=203
+SendInput(Win+B) -> 0
+WM_CONTEXTMENU to HWND 4524692 -> no #32768 menu
+```
+
+The shell notification icon/menu was not exposed through UI Automation, PyWinAuto/PyWin32 were
+not installed, and this session rejected both Win32 cursor and keyboard injection. Therefore no
+real tray click or native menu invocation was claimed.
+
+### Restart and Exit verdicts
+
+```text
+FAIL — real tray Restart: not performed; native UI driver blocked.
+FAIL — process survives Restart: unobserved; no Restart event occurred.
+FAIL — strictly greater Restart session_id: unobserved.
+FAIL — real tray Exit: not performed; native UI driver blocked.
+FAIL — tray Exit Stop Ack: unobserved.
+FAIL — Linux Idle within 2 seconds of tray Exit: unobserved.
+FAIL — process exit caused by tray Exit: unobserved.
+FAIL — task Ready after tray Exit: the task was Ready after forced cleanup, not after tray Exit.
+```
+
+### Safe cleanup observations
+
+The required cleanup path was attempted without treating it as a tray pass. A bounded UDP Stop
+probe used a receive-capable socket and found a real Stop Ack (11 bytes), then the canonical
+installed client was terminated because the tray Exit action was unavailable:
+
+```text
+CLEANUP_STOP_PROBE_TIMESTAMP=2026-08-23T01:36:11.4191325+08:00
+CLEANUP_STOP_PROBE_LOCAL=192.168.0.200:59437
+STOP_ACK_TIMESTAMP=2026-08-23T01:36:18.0609170+08:00
+STOP_ACK_SESSION_ID=1787419416417
+STOP_ACK_REMOTE=192.168.0.210:6902
+STOP_ACK_LENGTH=11
+CANONICAL_CLIENT_CLEANUP_TIMESTAMP=2026-08-23T01:36:33.5576740+08:00
+CANONICAL_CLIENT_CLEANUP_PIDS=31360
+CANONICAL_CLIENT_CLEANUP=STOP_PROCESS_SENT
+POST_CLEANUP_TIMESTAMP=2026-08-23T01:36:35.9137871+08:00 TASK_STATE=Ready TASK_ENABLED=True CLIENT_PROCESS_COUNT=0
+```
+
+The first cleanup Stop was followed by a client retry race before forced termination; the remote
+capture later returned Idle. The final remote cleanup observation was:
+
+```text
+REMOTE_CLEANUP_CHECK_TIMESTAMP=2026-08-23T01:39:24,412129894+08:00
+SERVICE_ACTIVE=active
+SERVER_PID=35138
+PAREC_EXACT=
+CAPTURE_SOURCE=57 alsa_input.pci-0000_00_1b.0.analog-stereo PipeWire s32le 2ch 48000Hz SUSPENDED
+```
+
+### Canonical task re-trigger (partial recovery evidence)
+
+The canonical task was triggered again; this is not claimed as post-Exit logon semantics because
+no real tray Exit occurred. A precision run proved task-triggered capture within ten seconds:
+
+```text
+PRECISION_RETRIGGER_COMMAND_TIMESTAMP=2026-08-23T01:43:53.2370838+08:00
+PRECISION_RETRIGGER_COMMAND_EXIT=0
+PRECISION_CAPTURE_OBSERVED_POLL=1=2026-08-23T01:43:54,217706963+08:00
+PAREC=35421 parec --raw --format=s16le --rate=48000 --channels=1 --latency-msec=5 --process-time-msec=5 --device=alsa_input.pci-0000_00_1b.0.analog-stereo
+SERVICE=active
+PRECISION_LOCAL_STATE_TIMESTAMP=2026-08-23T01:44:06.3122101+08:00 TASK_STATE=Running ENABLED=True PROCESS_COUNT=1
+PROCESS PID=18048 CREATION=08/23/2026 01:43:53 EXE=C:\Program Files\wifimic-client\wifimic_client.exe
+UDP_ENDPOINT=0.0.0.0:6902 PID=18048
+```
+
+The measured command-to-remote-capture observation was approximately 0.98 seconds. No Start Ack
+or session ID was inferred from this observation.
+
+### Final cleanup
+
+The precision cleanup received a real Stop Ack through the cleanup probe, then stopped only the
+canonical executable:
+
+```text
+PRECISION_CLEANUP_STOP_PROBE_TIMESTAMP=2026-08-23T01:44:25.5496644+08:00
+PRECISION_STOP_ACK_TIMESTAMP=2026-08-23T01:44:31.0769163+08:00
+PRECISION_STOP_ACK_SESSION_ID=1787420633347
+PRECISION_STOP_ACK_REMOTE=192.168.0.210:6902
+PRECISION_STOP_ACK_LENGTH=11
+PRECISION_CLEANUP_CANONICAL_PID=18048
+PRECISION_CLEANUP_CANONICAL=STOPPED_AFTER_ACK
+PRECISION_POST_STOP_LOCAL_TIMESTAMP=2026-08-23T01:44:39.4616542+08:00
+TASK_STATE=Ready ENABLED=True CLIENT_PROCESS_COUNT=0
+```
+
+Final Linux state at `2026-08-23T01:44:55,136440115+08:00`:
+
+```text
+SERVICE_ACTIVE=active
+SERVER_PID=35138
+LISTENER_6902=UNCONN 0 0 0.0.0.0:6902 0.0.0.0:* users:(('wifimic_server',pid=35138,fd=3))
+PAREC_EXACT=
+CAPTURE_SOURCE=57 alsa_input.pci-0000_00_1b.0.analog-stereo PipeWire s32le 2ch 48000Hz SUSPENDED
+```
+
+`pktmon filter add -p 6902` was attempted only for read-only wire observation and returned
+`Access Denied` (exit 5); no packet-capture filter or firewall rule was installed. No helper
+process remains. Todo 21 remains unchecked.
+
+### Final post-test verification command/output
+
+PowerShell 5.1 final-state command queried the canonical task, exact executable identity, UDP
+endpoint, `pktmon` process, and the pre-existing canonical firewall signature:
+
+```text
+FINAL_LOCAL_TIMESTAMP=2026-08-23T01:50:59.6637707+08:00
+TaskPath  : \wifimic\
+TaskName  : wifimic-client
+State     : Ready
+LastRunTime        : 2026/8/23 01:43:53
+LastTaskResult     : 4294967295
+FINAL_CANONICAL_PROCESS_COUNT=0
+FINAL_UDP_6902=
+FINAL_PKTMon_PROCESSES=
+ABSENT
+Name        : wifimic-client
+DisplayName : wifimic-client
+Enabled     : True
+Direction   : Inbound
+Action      : Allow
+Profile     : Any
+Protocol   : UDP
+LocalPort  : 6902
+RemotePort : Any
+LocalAddress  : Any
+RemoteAddress : 192.168.0.210
+```
+
+Linux SSH final-state command/output:
+
+```text
+FINAL_REMOTE_TIMESTAMP=2026-08-23T01:50:45,941299354+08:00
+SERVICE_ACTIVE=active
+ActiveState=active
+SubState=running
+MainPID=35138
+LISTENER_6902=UNCONN 0 0 0.0.0.0:6902 0.0.0.0:* users:(('wifimic_server',pid=35138,fd=3))
+PAREC_EXACT=
+CAPTURE_SOURCE=57 alsa_input.pci-0000_00_1b.0.analog-stereo PipeWire s32le 2ch 48000Hz SUSPENDED
+```
+
+---
+
+## Live acceptance retry with deeper automation — 2026-08-23 (second attempt)
+
+Outcome: **PARTIAL — UIA overflow flyout reached and icon clicked, but context menu not found; Shell_NotifyIconGetRect and WM_CONTEXTMENU approaches found no candidate windows**. The canonical task and refreshed Linux service were present. Real capture was observed. Three escalating automation methods were exercised; none produced a verifiable Restart or Exit menu click.
+
+### Read-only preflight (second retry)
+
+PowerShell 5.1 command:
+
+```powershell
+$task=@(Get-ScheduledTask -TaskPath '\wifimic\' -TaskName 'wifimic-client'); Get-ScheduledTaskInfo -TaskPath '\wifimic\' -TaskName 'wifimic-client'; Get-CimInstance Win32_Process -Filter "Name='wifimic_client.exe'"; Get-NetUDPEndpoint -LocalPort 6902; Get-PnpDevice -Class AudioEndpoint -Status OK | Where-Object FriendlyName -eq 'CABLE Input (VB-Audio Virtual Cable)'
+```
+
+Raw result at `2026-08-23T02:41:59.7709521+08:00`:
+
+```text
+TASK_START_EXIT=0
+CLIENT_POLL_TIMESTAMP=2026-08-23T02:42:00.0237664+08:00
+Name           : wifimic_client.exe
+ProcessId      : 23628
+CreationDate   : 2026/8/23 02:41:59
+ExecutablePath : C:\Program Files\wifimic-client\wifimic_client.exe
+CommandLine    : "C:\Program Files\wifimic-client\wifimic_client.exe"
+LocalAddress  : 0.0.0.0
+LocalPort     : 6902
+OwningProcess : 23628
+TASK_STATE=Running
+TASK_ENABLED=True
+LastRunTime    : 2026/8/23 02:41:59
+LastTaskResult : 267009
+```
+
+Linux SSH command:
+
+```text
+ssh ... arch-daniel "systemctl --user is-active wifimic-server; systemctl --user show wifimic-server -p MainPID; pgrep -a -x parec; pactl list short sources | grep alsa_input.pci-0000_00_1b.0.analog-stereo; ss -lunp | grep 6902"
+```
+
+Raw result at `2026-08-23T02:42:14,517775795+08:00`:
+
+```text
+SERVICE_ACTIVE=active
+SERVER_PID=35138
+PAREC_EXACT=36768 parec --raw --format=s16le --rate=48000 --channels=1 --latency-msec=5 --process-time-msec=5 --device=alsa_input.pci-0000_00_1b.0.analog-stereo
+CAPTURE_SOURCE=57	alsa_input.pci-0000_00_1b.0.analog-stereo	PipeWire	s32le 2ch 48000Hz	RUNNING
+LISTENER_6902=UNCONN 0      0            0.0.0.0:6902       0.0.0.0:*    users:(("wifimic_server",pid=35138,fd=3))
+```
+
+### Method 1: UIA overflow flyout + icon Invoke (first escalation)
+
+Timestamp: `2026-08-23T02:43:53.6818589+08:00` – `2026-08-23T02:45:38.9786681+08:00`
+
+- Chevron ("Show hidden icons") located by Unicode name codes (U+986F,U+793A,U+96B1,U+85CF,U+7684,U+5716,U+793A) and invoked successfully.
+- Overflow flyout window `TopLevelWindowForOverflowXamlIsland` appeared.
+- `wifimic-client` icon found inside flyout (AutomationId=NotifyItemIcon, Rect=3301,1882,60,60).
+- Icon supports `InvokePattern` and `ScrollItemPattern`; `InvokePattern.Invoke()` succeeded at `2026-08-23T02:48:13.5048920+08:00`.
+- **Restart menu item NOT FOUND** after icon click — context menu did not appear or was not enumerated by UIA.
+- Remote packet capture (AF_PACKET, 65,535-byte buffer) ran concurrently: continuous audio frames (494 bytes, TAG=0x00) with session ID `1787424119882` observed throughout; no new session ID, no Stop/Start control packets.
+
+Verdict: **Icon click reached the tray-icon crate (Invoke succeeded) but did not produce a native context menu** — likely a left-click instead of right-click.
+
+### Method 2: Shell_NotifyIconGetRect + SendInput right-click (second escalation)
+
+Timestamp: `2026-08-23T02:53:09.8354196+08:00` – `2026-08-23T02:53:18.6761053+08:00`
+
+- EnumWindows/EnumThreadWindows for PID 23628 returned **zero windows** (ENUM_WINDOWS_COUNT=0, ENUM_THREAD_WINDOWS_COUNT=0).
+- Shell_NotifyIconGetRect could not be called (no HWND to pass).
+- No candidate message-only window found.
+- Remote packet capture: session `1787424682907` continued; a Stop Ack (TAG=0x04, 11 bytes) for session `1787424119882` appeared at `2026-08-22T18:53:18.961353+00:00`, then audio resumed with session `1787424682907` — suggests an internal client restart or task retrigger, not a tray Restart.
+
+Verdict: **No HWND_MESSAGE window enumerable via EnumWindows/EnumThreadWindows** — the tray-icon crate's hidden window is not discoverable this way.
+
+### Method 3: WM_CONTEXTMENU/WM_RBUTTONDOWN via PostMessage (third escalation)
+
+Timestamp: `2026-08-23T02:58:07.0102103+08:00` – `2026-08-23T02:58:15.4648292+08:00`
+
+- EnumWindows/EnumThreadWindows again returned **zero windows** for the current PID (24968).
+- No candidate window to post WM_CONTEXTMENU or WM_RBUTTONDOWN.
+- Remote packet capture: session `1787424682907` continued uninterrupted; no control packets observed.
+
+Verdict: **Hidden message-only window not discoverable via standard window enumeration** — likely parented to HWND_MESSAGE (-3) which EnumWindows skips.
+
+### Restart and Exit verdicts (second retry)
+
+```text
+FAIL — real tray Restart: icon Invoke succeeded but no context menu appeared; Restart menu item not found.
+FAIL — process survives Restart: unobserved; no Restart event occurred.
+FAIL — strictly greater Restart session_id: unobserved; same session ID continued throughout.
+FAIL — real tray Exit: overflow flyout not found on second attempt; Exit menu item not found.
+FAIL — tray Exit Stop Ack: unobserved.
+FAIL — Linux Idle within 2 seconds of tray Exit: unobserved.
+FAIL — process exit caused by tray Exit: unobserved.
+FAIL — task Ready after tray Exit: task remained Running throughout.
+```
+
+### Cleanup (forced, not tray-triggered)
+
+```text
+CLEANUP_FORCED_STOP_TIMESTAMP=2026-08-23T02:58:59.3762270+08:00
+CLEANUP_PROCESS_STOPPED (PID 23628 via Stop-Process)
+POST_CLEANUP_TIMESTAMP=2026-08-23T02:58:59.3762270+08:00 TASK_STATE=Ready TASK_ENABLED=True
+STOP_PACKET_SENT_TIMESTAMP=2026-08-23T02:59:24.5482656+08:00 SESSION_ID=1787424682907
+REMOTE_POST_STOP_TIMESTAMP=2026-08-23T02:59:28,352213148+08:00 PAREC_EXACT= CAPTURE_SOURCE=... IDLE
+FINAL_VERIFICATION_TIMESTAMP=2026-08-23T02:59:39.9979310+08:00 CLIENT_PROCESS=ABSENT TASK_STATE=Ready TASK_ENABLED=True
+FINAL_REMOTE_TIMESTAMP=2026-08-23T02:59:49,453506984+08:00 SERVICE_ACTIVE=active SERVER_PID=35138 PAREC_EXACT= CAPTURE_SOURCE=... SUSPENDED LISTENER_6902=active
+```
+
+All temporary automation scripts (`.debug-task21-*.ps1`) removed. No injected assemblies, helper processes, or packet-capture filters remain.
+
+### Root cause summary
+
+The `tray-icon`/`muda` crate creates a hidden message-only window (parent `HWND_MESSAGE`) that:
+1. Is not enumerated by `EnumWindows` or `EnumThreadWindows`.
+2. Does not expose its context menu via UI Automation unless the native right-click protocol is followed.
+3. The UIA `InvokePattern` on the overflow flyout icon performs a left-click, which the crate does not treat as a context-menu trigger.
+
+**Required fix for future automation**: Use `Shell_NotifyIconGetRect` with the correct `NOTIFYICONIDENTIFIER` (HWND + UID) obtained by enumerating **all** windows including message-only ones (requires `GetShellWindow`/`FindWindowEx` traversal or a kernel-mode enumerator), then synthesize a true right-click at the returned rectangle center via `SendInput` with `MOUSEEVENTF_RIGHTDOWN|UP`. Alternatively, the crate could expose an IPC endpoint for test automation.
+
+Todo 21 remains **UNCHECKED** — no verifiable native tray Restart or Exit click was achieved.

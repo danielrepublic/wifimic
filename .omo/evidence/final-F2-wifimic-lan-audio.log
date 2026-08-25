@@ -1,0 +1,90 @@
+F2 final independent verification wave; commands re-run on the current working tree after the renderer and latency LOC extractions.
+
+=== cargo fmt --all -- --check ===
+Warning: Unknown configuration option `use_small_diffs`
+Warning: Unknown configuration option `use_small_diffs`
+Warning: Unknown configuration option `use_small_diffs`
+Warning: Unknown configuration option `use_small_diffs`
+Warning: Unknown configuration option `use_small_diffs`
+Warning: Unknown configuration option `use_small_diffs`
+Warning: Unknown configuration option `use_small_diffs`
+Warning: Unknown configuration option `use_small_diffs`
+EXIT_CODE=0
+
+=== cargo test --workspace ===
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.23s
+test result: ok. 32 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out
+test result: ok. 40 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+test result: ok. 18 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+EXIT_CODE=0
+Executed test total: 113 passed, 0 failed.
+Ignored test total: 6; ignored tests were not counted as executed passes.
+Ignored tests: 4 client live VB-CABLE tests; 1 server live PipeWire capture test; 1 live two-host/firewall acceptance test.
+
+=== cargo build --workspace ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.16s
+EXIT_CODE=0
+
+=== cargo clippy --workspace -- -D warnings ===
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.20s
+EXIT_CODE=0
+
+=== git diff --check ===
+EXIT_CODE=0
+
+=== git diff --check c5dee65^ HEAD ===
+EXIT_CODE=0
+
+=== refactor preservation review ===
+render_windows.rs: extraction-only facade; public enumerate_render_endpoints re-export preserved; endpoint behavior tests passed.
+latency.rs: calibration and measurement names re-exported; calibration wire bytes/tags/offsets unchanged; protocol wire tests passed.
+WIRE_LAYOUT_AND_ENDPOINT_BEHAVIOR=PASS
+PUBLIC_NAMES_AND_REEXPORTS=PASS
+
+=== deterministic magic-number scan ===
+Tool: ast-grep 0.45.0, Rust integer_literal AST nodes
+Roots: apps/wifimic_client/src, apps/wifimic_server/src, crates/wifimic_diagnostics/src, crates/wifimic_protocol/src
+Excluded: test-named files/directories and each #[cfg(test)] item span
+Exact allow-list: protocol 48_000/16/1/6902 plus resolved SAMPLES_PER_FRAME/PCM_PAYLOAD_BYTES; server 30s/5s; client 5s/5s/2-missed/10s; jitter 40ms/200ms; rotation 7d/10MiB; calibration 20ms/30s/5ms/<=2ms-per-30s/<=25ms; session-ordering +1
+AST_ROWS_TOTAL=616
+PRODUCTION_INTEGER_ROWS=198
+NAMED_CONSTANT_OR_DOC_CONTEXT_ROWS=85
+NON_CONST_ROWS=113
+FLAGGED_FINDINGS=0
+NON_CONST_DISTINCT_VALUES=0,1,2,168,192,200
+Former flagged structural patterns: all absent, PASS
+
+=== typed-error/state-machine review ===
+CalibrationCliError: typed transport/protocol/calibration sources and dedicated peer/probe/sequence variants, PASS
+TrayError: boxed #[source] error, PASS
+ClientState: Establishing/Streaming/Unreachable/Stopped, explicit state machine, PASS
+ControlState: Idle/Starting/Streaming, explicit state machine, PASS
+ControlError variants and sources: typed, PASS
+Stringly-typed error variants: none found, PASS
+Unnecessary reference-project complexity or scope creep: none found, PASS
+
+=== pure-LOC check ===
+Counter: excludes blank/comment/test-only production lines and the renderer #[path] module directive.
+apps/wifimic_client/src/render_windows.rs: physical=196; pure_loc=175; prior_pure_loc=264; disposition=PASS <=250
+apps/wifimic_client/src/render_windows_endpoints.rs: physical=104; pure_loc=97; disposition=PASS <=250
+crates/wifimic_protocol/src/latency.rs: physical=108; production_physical=14; pure_loc=12; prior_pure_loc=294; disposition=PASS <=250
+crates/wifimic_protocol/src/latency/calibration.rs: physical=255; pure_loc=226; disposition=PASS <=250
+crates/wifimic_protocol/src/latency/measurement.rs: physical=79; pure_loc=68; disposition=PASS <=250
+CHANGED_PRODUCTION_FILES_OVER_250=0
+PRIOR_FAILING_FILES_REMAINING=0
+
+=== Rust LSP diagnostics ===
+Requested: render_windows.rs, render_windows_endpoints.rs, latency.rs, latency/calibration.rs, latency/measurement.rs
+Result: daemon timeout after 30s on first request; MCP timeout on remaining requests.
+Environment limitation only; Cargo gates are clean and authoritative.
+
+=== final verdict ===
+FAILURES=0
+VERDICT: APPROVE

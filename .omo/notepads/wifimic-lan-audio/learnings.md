@@ -152,6 +152,12 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 - At `2026-08-22T21:20:37,302525414+08:00`, `arch-daniel` reported `wifimic-server=active`, MainPID 33601, and UDP `0.0.0.0:6902` listening. This Linux fact cannot satisfy the two-host lifecycle without the missing Windows artifacts.
 - Because the required installed artifacts were absent and host mutation was not authorized, no tray/task interaction, logout, task registration, executable installation, or remote service mutation was attempted. The paired Task 21 evidence records every acceptance criterion as FAIL rather than substituting mocks.
 
+## 2026-08-22 Todo 23
+
+- The capture retry path is a 5-second `ControlPlane::Starting` retry that emits typed `CaptureRetry` metadata; it cannot be observed without a real client keeping the session heartbeating.
+- A fresh read-only preflight found `wifimic-server` active on `arch-daniel` with UDP 6902 listening, but the canonical Windows client task, install, process identities, and local UDP endpoint were absent. The remote journal contained zero heartbeat and `CaptureRetry` records.
+- The pinned PipeWire source existed and was already `SUSPENDED`; no `pactl` source mutation was attempted. Postcheck matched the source name, mute, volume, default source, and detailed ALSA/PipeWire properties, so host audio configuration was left unchanged.
+
 ## 2026-08-22 Todo 22
 
 - The reconnect implementation uses 5-second heartbeat/retry timers, enters `Unreachable` after two missed heartbeats, mints a fresh session ID on each retry, and relies on the server's 30-second timeout plus strict `SessionOrder` supersession.
@@ -174,3 +180,29 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 
 - The F2 literal review is easiest to close without behavior drift when constants preserve the original numeric values and protocol offsets are derived from existing prefix/field-width constants rather than re-declaring wire positions.
 - `TrayError` now uses a boxed `#[source]` error for heterogeneous tray-icon operations, while the calibration CLI uses a dedicated error enum with transparent typed wrappers for transport, protocol, and calibration failures.
+
+## 2026-08-22 F2 latency extraction
+
+- `latency.rs` was reduced from 294 F2 pure production LOC to 12 by retaining its public facade and tests while moving unchanged calibration/protocol code to `latency/calibration.rs` (226 pure LOC) and measurement/statistics helpers to `latency/measurement.rs` (68 pure LOC). Every production file is below the 250-LOC ceiling.
+- Parent-module `pub use` re-exports preserve the existing `wifimic_protocol::latency` names and `lib.rs` exports; calibration constants, packet tags/layout, timestamp math, tracker behavior, raw/conservative percentiles, application latency, and deterministic tone code were not altered.
+- Focused protocol tests remained 7 unit + 11 wire-contract tests. Workspace tests passed with 113 passed and 6 ignored; workspace build, Clippy with `-D warnings`, and formatting check passed. Rust LSP diagnostics were attempted for all three changed files but the existing daemon timed out; Cargo remained authoritative as in prior F2 work.
+
+## 2026-08-22 F2 render extraction
+
+- `render_windows.rs` stays the public WASAPI renderer facade while endpoint discovery, exact device selection, and COM apartment cleanup live in the private `render_windows_endpoints.rs` sibling; the `Renderer`, `enumerate_render_endpoints`, and `RenderError` seams remain unchanged.
+- F2 pure production LOC fell from 264 to 175 in `render_windows.rs`; the extracted sibling is 97 pure production LOC, so both files remain below the 250-LOC ceiling.
+- Focused `cargo test -p wifimic_client` passed with 72 passed and 4 ignored tests across the library and binary targets. Rust LSP diagnostics timed out on both changed Rust files, matching the workspace's existing limitation; Cargo remains authoritative.
+
+## 2026-08-23 Todo 21 live acceptance
+
+- The exact registered task action read back as `Execute=C:\Program Files\wifimic-client\wifimic_client.exe`, empty arguments, and working directory `C:\Program Files\wifimic-client`; the task was `Ready`/enabled before and after the live run.
+- The real Windows client bound `0.0.0.0:6902`, while the Linux service stayed active at PID 35138 and the pinned PipeWire source changed from `SUSPENDED` to `RUNNING` only while a client session was active, then returned to `SUSPENDED` after cleanup.
+- The production client log directory is created on startup, but the live files observed in this run contained only `wifimic-diagnostics-v1 created_at_unix_secs=...`; protocol Ack/session evidence therefore must come from a permitted wire observer or an exposed production log sink, not from inference.
+- Windows desktop input is the decisive acceptance seam for tray lifecycle tests: shell tray geometry and the real `tray_icon_app` window were discoverable, but this session's `SetCursorPos`/`SendInput` calls were rejected and UI Automation did not expose the icon/menu. A native UI-capable interactive session is required for Todo 21.
+
+## 2026-08-23 Todo 23/24 redeploy rerun
+
+- On this PipeWire host, `pactl set-card-profile ... off` genuinely removed the pinned source from `pactl list short sources` but did not close an already-running `parec`; `pw-cli info` exposed the dangling stream as a separate `Stream/Input/Audio` node. Destroying the exact source node first, verifying its absence, then destroying only the exact `parec` stream node produced the read-side failure and the server's five-second `CaptureRetry` loop. Restoring the card by toggling `off` then the exact prior `output:analog-stereo+input:analog-stereo` profile recreated the source with baseline mute, volume, and default-source state.
+- The PipeWire source's Pulse index/object serial and PipeWire global node ID are different namespaces: source `object.id=58` and `parec` global node `63` were the values needed for precise, non-broad fault injection in this run.
+- `env_logger` journald output is sufficient for authoritative Todo 24 timing: `HeartbeatTimeout elapsed_since_heartbeat_ms=30001` directly supplies the last accepted heartbeat interval, while the adjacent `SessionStopped` timestamp proves the timeout stop event. The `short-precise` journal timestamp is more precise than the embedded UTC event field; do not claim more UTC precision than the latter provides.
+- Concurrent Todo 20 diagnostic wrappers can stop the installed client and kill remote `parec`; live Todo 24 acceptance must wait for those wrappers to finish naturally rather than treating their temporary client as canonical evidence. The canonical task path and exact Program Files executable were re-gated after the interference ended.

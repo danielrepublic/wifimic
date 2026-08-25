@@ -6,9 +6,9 @@
       "work_id": "wifimic-lan-audio-fe11a1d7",
       "active_plan": "C:\\Users\\Daniel\\Documents\\opencode\\wifimic\\.omo\\plans\\wifimic-lan-audio.md",
       "plan_name": "wifimic-lan-audio",
-      "status": "active",
+      "status": "completed",
       "started_at": "2026-08-22T07:00:29.946Z",
-      "updated_at": "2026-08-22T07:00:29.946Z",
+      "updated_at": "2026-08-22T22:00:15.052Z",
       "session_ids": [
         "opencode:ses_fd7baa205ffevkbw7GbF6UxVKD"
       ],
@@ -16,13 +16,238 @@
         "opencode:ses_fd7baa205ffevkbw7GbF6UxVKD": "direct"
       },
       "agent": "atlas",
-      "task_sessions": {}
+      "task_sessions": {
+        "todo:1": {
+          "task_key": "todo:1",
+          "task_label": "1",
+          "task_title": "Generate or use a 1kHz sine tone (a short WAV file or `pw-play`-compatible stream is fine; `sox`, `ffmpeg`, or a simple generated PCM WAV all work if available — check what's installed on `arch-daniel` first with `which sox ffmpeg pw-play pw-cat pw-link pw-record`).",
+          "session_id": "opencode:ses_fd4afb4abffeAQJWrgeN3lMufm",
+          "agent": "Sisyphus-Junior",
+          "category": "deep",
+          "started_at": "2026-08-22T07:09:44.445Z",
+          "ended_at": "2026-08-22T22:00:15.052Z",
+          "elapsed_ms": 53430607,
+          "status": "completed",
+          "updated_at": "2026-08-22T22:00:15.052Z"
+        },
+        "todo:2": {
+          "task_key": "todo:2",
+          "task_label": "2",
+          "task_title": "Scaffold the wifimic Cargo workspace (crates + binaries, pinned toolchain, lints)",
+          "session_id": "opencode:ses_fd7adb4e3ffeIYKDAiBFlO9tzk",
+          "agent": "Sisyphus-Junior",
+          "category": "quick",
+          "updated_at": "2026-08-22T07:24:11.108Z",
+          "started_at": "2026-08-22T07:24:11.108Z",
+          "status": "running"
+        },
+        "todo:3": {
+          "task_key": "todo:3",
+          "task_label": "3",
+          "task_title": "Implement `wifimic_protocol`: constants, audio frame encode/decode, control-message wire contract, and a documented byte-size invariant test",
+          "session_id": "opencode:ses_fd7a38915ffecC3bkAsOwwUWUw",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-high",
+          "updated_at": "2026-08-22T07:41:07.843Z",
+          "started_at": "2026-08-22T07:41:07.843Z",
+          "status": "running"
+        },
+        "todo:4": {
+          "task_key": "todo:4",
+          "task_label": "4",
+          "task_title": "Implement `wifimic_diagnostics`: typed events, log sink, rate limiter",
+          "session_id": "opencode:ses_fd793d147ffe7pxX1e4FR1kAsh",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-low",
+          "updated_at": "2026-08-22T07:56:46.614Z",
+          "started_at": "2026-08-22T07:56:46.614Z",
+          "status": "running"
+        },
+        "todo:5": {
+          "task_key": "todo:5",
+          "task_label": "5",
+          "task_title": "Implement the Linux capture adapter pinned to the verified PipeWire source",
+          "session_id": "opencode:ses_fd7840c7dffe7PXZ4gp8yZm0eo",
+          "agent": "Sisyphus-Junior",
+          "started_at": "2026-08-22T08:24:57.134Z",
+          "status": "running",
+          "updated_at": "2026-08-22T08:50:38.867Z"
+        },
+        "todo:6": {
+          "task_key": "todo:6",
+          "task_label": "6",
+          "task_title": "Implement the Linux control-plane and capture-retry state machine",
+          "session_id": "opencode:ses_fd74fd71dffeSsJEltkArGKJnt",
+          "agent": "Sisyphus-Junior",
+          "category": "writing",
+          "updated_at": "2026-08-22T09:11:01.844Z",
+          "started_at": "2026-08-22T09:11:01.844Z",
+          "status": "running"
+        },
+        "todo:12": {
+          "task_key": "todo:12",
+          "task_label": "12",
+          "task_title": "Implement the Windows control-plane client (start/heartbeat/reconnect/peer-IP allow-list)",
+          "session_id": "opencode:ses_fd73c1985ffenxapUNHQHCrkt4",
+          "agent": "Sisyphus-Junior",
+          "started_at": "2026-08-22T09:43:32.165Z",
+          "status": "running",
+          "updated_at": "2026-08-22T09:51:06.124Z"
+        },
+        "todo:13": {
+          "task_key": "todo:13",
+          "task_label": "13",
+          "task_title": "Wire the tray icon's Restart/Exit menu to the control-plane",
+          "session_id": "opencode:ses_fd71a706fffebYAtLSeDMDbcUV",
+          "agent": "Sisyphus-Junior",
+          "category": "visual-engineering",
+          "started_at": "2026-08-22T09:53:51.461Z",
+          "status": "running",
+          "updated_at": "2026-08-22T10:14:34.132Z"
+        },
+        "todo:15": {
+          "task_key": "todo:15",
+          "task_label": "15",
+          "task_title": "Build the Windows interactive Scheduled Task installer (autostart + firewall scoping + endpoint preflight)",
+          "session_id": "opencode:ses_fd707d5b1ffehK5lrOJD2KiZYd",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-high",
+          "updated_at": "2026-08-22T10:43:15.534Z",
+          "started_at": "2026-08-22T10:43:15.534Z",
+          "status": "running"
+        },
+        "todo:17": {
+          "task_key": "todo:17",
+          "task_label": "17",
+          "task_title": "Implement Windows update/rollback tooling",
+          "session_id": "opencode:ses_fd6ec9f52ffeihm8pTmywzU31s",
+          "agent": "Sisyphus-Junior",
+          "started_at": "2026-08-22T11:07:39.187Z",
+          "status": "running",
+          "updated_at": "2026-08-22T11:12:32.357Z"
+        },
+        "todo:18": {
+          "task_key": "todo:18",
+          "task_label": "18",
+          "task_title": "Write the end-to-end two-machine deployment guide (Traditional Chinese)",
+          "session_id": "opencode:ses_fd6c72eabffetKJB5O4Ubp0GT2",
+          "agent": "Sisyphus-Junior",
+          "category": "writing",
+          "started_at": "2026-08-22T11:25:17.605Z",
+          "status": "running",
+          "updated_at": "2026-08-22T11:28:12.208Z"
+        },
+        "todo:20": {
+          "task_key": "todo:20",
+          "task_label": "20",
+          "task_title": "Measure real two-host application-level audio latency (P95 ≤ 200 ms, normal-network acceptance run) and separately characterize behavior under saturated Wi-Fi",
+          "session_id": "opencode:ses_fd6c466d0ffews720rMjfK0AUS",
+          "agent": "Sisyphus-Junior",
+          "started_at": "2026-08-22T11:47:52.211Z",
+          "status": "running",
+          "updated_at": "2026-08-22T11:56:17.027Z"
+        },
+        "todo:21": {
+          "task_key": "todo:21",
+          "task_label": "21",
+          "task_title": "Verify the real tray Exit/Restart lifecycle end-to-end",
+          "session_id": "opencode:ses_fd6621de7ffemIfQ2iTg0M5tl8",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-high",
+          "updated_at": "2026-08-22T13:25:41.370Z",
+          "started_at": "2026-08-22T13:25:41.370Z",
+          "status": "running"
+        },
+        "todo:22": {
+          "task_key": "todo:22",
+          "task_label": "22",
+          "task_title": "Verify automatic reconnection after a real network interruption",
+          "session_id": "opencode:ses_fd65880dbffekCbS9dBhSjgSQc",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-high",
+          "updated_at": "2026-08-22T13:34:33.041Z",
+          "started_at": "2026-08-22T13:34:33.041Z",
+          "status": "running"
+        },
+        "todo:24": {
+          "task_key": "todo:24",
+          "task_label": "24",
+          "task_title": "Verify the 30-second heartbeat-timeout auto-stop on the real system",
+          "session_id": "opencode:ses_fd6582d8dffebN9CVIBpU6x1gv",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-low",
+          "updated_at": "2026-08-22T19:56:49.700Z",
+          "started_at": "2026-08-22T13:35:22.097Z",
+          "status": "completed",
+          "ended_at": "2026-08-22T19:56:49.700Z",
+          "elapsed_ms": 22887603
+        },
+        "todo:23": {
+          "task_key": "todo:23",
+          "task_label": "23",
+          "task_title": "Verify Linux capture-source-missing retry behavior on the real host",
+          "session_id": "opencode:ses_fd658564affeaVI4GFkC2k2JeW",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-low",
+          "updated_at": "2026-08-22T13:36:25.945Z",
+          "started_at": "2026-08-22T13:36:25.945Z",
+          "status": "running"
+        },
+        "final-wave:f1": {
+          "task_key": "final-wave:f1",
+          "task_label": "F1",
+          "task_title": "Plan compliance audit",
+          "session_id": "opencode:ses_fd64081a0ffezUZJAbo7As48qb",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-high",
+          "started_at": "2026-08-22T13:43:59.205Z",
+          "status": "running",
+          "updated_at": "2026-08-22T14:08:31.938Z"
+        },
+        "final-wave:f4": {
+          "task_key": "final-wave:f4",
+          "task_label": "F4",
+          "task_title": "Scope fidelity (Final Verification Wave)",
+          "session_id": "opencode:ses_fd64ce446ffebBti03PLfrP9da",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-high",
+          "updated_at": "2026-08-22T13:46:36.924Z",
+          "started_at": "2026-08-22T13:46:36.924Z",
+          "status": "running"
+        },
+        "final-wave:f2": {
+          "task_key": "final-wave:f2",
+          "task_label": "F2",
+          "task_title": "Code quality review (Final Verification Wave)",
+          "session_id": "opencode:ses_fd64d1ac7ffeKiphmAR2cXaFJP",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-high",
+          "updated_at": "2026-08-22T14:09:22.968Z",
+          "started_at": "2026-08-22T13:52:18.736Z",
+          "status": "completed",
+          "ended_at": "2026-08-22T14:09:22.968Z",
+          "elapsed_ms": 1024232
+        },
+        "final-wave:f3": {
+          "task_key": "final-wave:f3",
+          "task_label": "F3",
+          "task_title": "Real manual QA (Final Verification Wave)",
+          "session_id": "opencode:ses_fd631a4b6ffeGFZa7GWGee5Rt7",
+          "agent": "Sisyphus-Junior",
+          "category": "unspecified-high",
+          "updated_at": "2026-08-22T14:14:47.124Z",
+          "started_at": "2026-08-22T14:14:47.124Z",
+          "status": "running"
+        }
+      },
+      "ended_at": "2026-08-22T14:15:22.949Z",
+      "elapsed_ms": 26093003
     }
   },
   "active_plan": "C:\\Users\\Daniel\\Documents\\opencode\\wifimic\\.omo\\plans\\wifimic-lan-audio.md",
   "started_at": "2026-08-22T07:00:29.946Z",
-  "status": "active",
-  "updated_at": "2026-08-22T07:00:29.946Z",
+  "status": "completed",
+  "updated_at": "2026-08-22T22:00:15.052Z",
   "session_ids": [
     "opencode:ses_fd7baa205ffevkbw7GbF6UxVKD"
   ],
@@ -30,6 +255,231 @@
     "opencode:ses_fd7baa205ffevkbw7GbF6UxVKD": "direct"
   },
   "plan_name": "wifimic-lan-audio",
-  "task_sessions": {},
-  "agent": "atlas"
+  "task_sessions": {
+    "todo:1": {
+      "task_key": "todo:1",
+      "task_label": "1",
+      "task_title": "Generate or use a 1kHz sine tone (a short WAV file or `pw-play`-compatible stream is fine; `sox`, `ffmpeg`, or a simple generated PCM WAV all work if available — check what's installed on `arch-daniel` first with `which sox ffmpeg pw-play pw-cat pw-link pw-record`).",
+      "session_id": "opencode:ses_fd4afb4abffeAQJWrgeN3lMufm",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "started_at": "2026-08-22T07:09:44.445Z",
+      "ended_at": "2026-08-22T22:00:15.052Z",
+      "elapsed_ms": 53430607,
+      "status": "completed",
+      "updated_at": "2026-08-22T22:00:15.052Z"
+    },
+    "todo:2": {
+      "task_key": "todo:2",
+      "task_label": "2",
+      "task_title": "Scaffold the wifimic Cargo workspace (crates + binaries, pinned toolchain, lints)",
+      "session_id": "opencode:ses_fd7adb4e3ffeIYKDAiBFlO9tzk",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-08-22T07:24:11.108Z",
+      "started_at": "2026-08-22T07:24:11.108Z",
+      "status": "running"
+    },
+    "todo:3": {
+      "task_key": "todo:3",
+      "task_label": "3",
+      "task_title": "Implement `wifimic_protocol`: constants, audio frame encode/decode, control-message wire contract, and a documented byte-size invariant test",
+      "session_id": "opencode:ses_fd7a38915ffecC3bkAsOwwUWUw",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-08-22T07:41:07.843Z",
+      "started_at": "2026-08-22T07:41:07.843Z",
+      "status": "running"
+    },
+    "todo:4": {
+      "task_key": "todo:4",
+      "task_label": "4",
+      "task_title": "Implement `wifimic_diagnostics`: typed events, log sink, rate limiter",
+      "session_id": "opencode:ses_fd793d147ffe7pxX1e4FR1kAsh",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-low",
+      "updated_at": "2026-08-22T07:56:46.614Z",
+      "started_at": "2026-08-22T07:56:46.614Z",
+      "status": "running"
+    },
+    "todo:5": {
+      "task_key": "todo:5",
+      "task_label": "5",
+      "task_title": "Implement the Linux capture adapter pinned to the verified PipeWire source",
+      "session_id": "opencode:ses_fd7840c7dffe7PXZ4gp8yZm0eo",
+      "agent": "Sisyphus-Junior",
+      "started_at": "2026-08-22T08:24:57.134Z",
+      "status": "running",
+      "updated_at": "2026-08-22T08:50:38.867Z"
+    },
+    "todo:6": {
+      "task_key": "todo:6",
+      "task_label": "6",
+      "task_title": "Implement the Linux control-plane and capture-retry state machine",
+      "session_id": "opencode:ses_fd74fd71dffeSsJEltkArGKJnt",
+      "agent": "Sisyphus-Junior",
+      "category": "writing",
+      "updated_at": "2026-08-22T09:11:01.844Z",
+      "started_at": "2026-08-22T09:11:01.844Z",
+      "status": "running"
+    },
+    "todo:12": {
+      "task_key": "todo:12",
+      "task_label": "12",
+      "task_title": "Implement the Windows control-plane client (start/heartbeat/reconnect/peer-IP allow-list)",
+      "session_id": "opencode:ses_fd73c1985ffenxapUNHQHCrkt4",
+      "agent": "Sisyphus-Junior",
+      "started_at": "2026-08-22T09:43:32.165Z",
+      "status": "running",
+      "updated_at": "2026-08-22T09:51:06.124Z"
+    },
+    "todo:13": {
+      "task_key": "todo:13",
+      "task_label": "13",
+      "task_title": "Wire the tray icon's Restart/Exit menu to the control-plane",
+      "session_id": "opencode:ses_fd71a706fffebYAtLSeDMDbcUV",
+      "agent": "Sisyphus-Junior",
+      "category": "visual-engineering",
+      "started_at": "2026-08-22T09:53:51.461Z",
+      "status": "running",
+      "updated_at": "2026-08-22T10:14:34.132Z"
+    },
+    "todo:15": {
+      "task_key": "todo:15",
+      "task_label": "15",
+      "task_title": "Build the Windows interactive Scheduled Task installer (autostart + firewall scoping + endpoint preflight)",
+      "session_id": "opencode:ses_fd707d5b1ffehK5lrOJD2KiZYd",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-08-22T10:43:15.534Z",
+      "started_at": "2026-08-22T10:43:15.534Z",
+      "status": "running"
+    },
+    "todo:17": {
+      "task_key": "todo:17",
+      "task_label": "17",
+      "task_title": "Implement Windows update/rollback tooling",
+      "session_id": "opencode:ses_fd6ec9f52ffeihm8pTmywzU31s",
+      "agent": "Sisyphus-Junior",
+      "started_at": "2026-08-22T11:07:39.187Z",
+      "status": "running",
+      "updated_at": "2026-08-22T11:12:32.357Z"
+    },
+    "todo:18": {
+      "task_key": "todo:18",
+      "task_label": "18",
+      "task_title": "Write the end-to-end two-machine deployment guide (Traditional Chinese)",
+      "session_id": "opencode:ses_fd6c72eabffetKJB5O4Ubp0GT2",
+      "agent": "Sisyphus-Junior",
+      "category": "writing",
+      "started_at": "2026-08-22T11:25:17.605Z",
+      "status": "running",
+      "updated_at": "2026-08-22T11:28:12.208Z"
+    },
+    "todo:20": {
+      "task_key": "todo:20",
+      "task_label": "20",
+      "task_title": "Measure real two-host application-level audio latency (P95 ≤ 200 ms, normal-network acceptance run) and separately characterize behavior under saturated Wi-Fi",
+      "session_id": "opencode:ses_fd6c466d0ffews720rMjfK0AUS",
+      "agent": "Sisyphus-Junior",
+      "started_at": "2026-08-22T11:47:52.211Z",
+      "status": "running",
+      "updated_at": "2026-08-22T11:56:17.027Z"
+    },
+    "todo:21": {
+      "task_key": "todo:21",
+      "task_label": "21",
+      "task_title": "Verify the real tray Exit/Restart lifecycle end-to-end",
+      "session_id": "opencode:ses_fd6621de7ffemIfQ2iTg0M5tl8",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-08-22T13:25:41.370Z",
+      "started_at": "2026-08-22T13:25:41.370Z",
+      "status": "running"
+    },
+    "todo:22": {
+      "task_key": "todo:22",
+      "task_label": "22",
+      "task_title": "Verify automatic reconnection after a real network interruption",
+      "session_id": "opencode:ses_fd65880dbffekCbS9dBhSjgSQc",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-08-22T13:34:33.041Z",
+      "started_at": "2026-08-22T13:34:33.041Z",
+      "status": "running"
+    },
+    "todo:24": {
+      "task_key": "todo:24",
+      "task_label": "24",
+      "task_title": "Verify the 30-second heartbeat-timeout auto-stop on the real system",
+      "session_id": "opencode:ses_fd6582d8dffebN9CVIBpU6x1gv",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-low",
+      "updated_at": "2026-08-22T19:56:49.700Z",
+      "started_at": "2026-08-22T13:35:22.097Z",
+      "status": "completed",
+      "ended_at": "2026-08-22T19:56:49.700Z",
+      "elapsed_ms": 22887603
+    },
+    "todo:23": {
+      "task_key": "todo:23",
+      "task_label": "23",
+      "task_title": "Verify Linux capture-source-missing retry behavior on the real host",
+      "session_id": "opencode:ses_fd658564affeaVI4GFkC2k2JeW",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-low",
+      "updated_at": "2026-08-22T13:36:25.945Z",
+      "started_at": "2026-08-22T13:36:25.945Z",
+      "status": "running"
+    },
+    "final-wave:f1": {
+      "task_key": "final-wave:f1",
+      "task_label": "F1",
+      "task_title": "Plan compliance audit",
+      "session_id": "opencode:ses_fd64081a0ffezUZJAbo7As48qb",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "started_at": "2026-08-22T13:43:59.205Z",
+      "status": "running",
+      "updated_at": "2026-08-22T14:08:31.938Z"
+    },
+    "final-wave:f4": {
+      "task_key": "final-wave:f4",
+      "task_label": "F4",
+      "task_title": "Scope fidelity (Final Verification Wave)",
+      "session_id": "opencode:ses_fd64ce446ffebBti03PLfrP9da",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-08-22T13:46:36.924Z",
+      "started_at": "2026-08-22T13:46:36.924Z",
+      "status": "running"
+    },
+    "final-wave:f2": {
+      "task_key": "final-wave:f2",
+      "task_label": "F2",
+      "task_title": "Code quality review (Final Verification Wave)",
+      "session_id": "opencode:ses_fd64d1ac7ffeKiphmAR2cXaFJP",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-08-22T14:09:22.968Z",
+      "started_at": "2026-08-22T13:52:18.736Z",
+      "status": "completed",
+      "ended_at": "2026-08-22T14:09:22.968Z",
+      "elapsed_ms": 1024232
+    },
+    "final-wave:f3": {
+      "task_key": "final-wave:f3",
+      "task_label": "F3",
+      "task_title": "Real manual QA (Final Verification Wave)",
+      "session_id": "opencode:ses_fd631a4b6ffeGFZa7GWGee5Rt7",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-high",
+      "updated_at": "2026-08-22T14:14:47.124Z",
+      "started_at": "2026-08-22T14:14:47.124Z",
+      "status": "running"
+    }
+  },
+  "agent": "atlas",
+  "ended_at": "2026-08-22T14:15:22.949Z",
+  "elapsed_ms": 26093003
 }

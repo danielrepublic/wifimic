@@ -1,0 +1,156 @@
+# Todo 22 — failure-path evidence for automatic reconnect acceptance
+# Captured 2026-08-22 from C:\Users\Daniel\Documents\opencode\wifimic.
+# Outcome: BLOCKED before live streaming; no network interruption was attempted.
+
+## Exact blocker receipt
+
+Read-only Windows preflight at `2026-08-22T21:29:35.9712855+08:00` returned:
+
+```text
+TASK_\wifimic\wifimic-client=ABSENT
+INSTALL_ROOT_EXISTS=False
+INSTALL_ROOT=ABSENT
+CLIENT_PROCESS_wifimic_client.exe=ABSENT
+CLIENT_PROCESS_wifimic-client.exe=ABSENT
+CLIENT_COMMAND_wifimic_client.exe=ABSENT
+CLIENT_COMMAND_wifimic-client.exe=ABSENT
+TARGET_ROOT_EXISTS=True
+C:\Users\Daniel\Documents\opencode\wifimic\target\debug\wifimic_client.exe 28274004 2026/8/22 19:54:14
+Wi-Fi            Up           5       F4-26-79-6C-C2-44 433.3 Mbps Intel(R) Wi-Fi 6E AX211 160MHz
+UDP_6902_LOCAL_ENDPOINTS=NONE
+```
+
+The target debug executable is not an installed client and was not launched as a
+mock or substitute. No client process existed from which a real stream could be
+observed safely.
+
+Read-only Linux SSH preflight at `2026-08-22T21:28:50,877624055+08:00` returned:
+
+```text
+SERVICE_ACTIVE=active
+MainPID=33601
+LISTENER_6902=UNCONN 0      0            0.0.0.0:6902       0.0.0.0:*    users:(("wifimic_server",pid=33601,fd=3))
+REMOTE_PROCESS=33601 /home/daniel/.local/bin/wifimic_server
+BINARY_STAT=/home/daniel/.local/bin/wifimic_server|2026-08-22 16:44:50.539301747 +0800|450624
+BINARY_SHA256=0f7b8036f0e75fe190a30caa11fae51f4cc8c567f18d271572ca4f60c5eab221  /home/daniel/.local/bin/wifimic_server
+```
+
+The prior real two-host Start/Ack attempt recorded the exact failure:
+
+```text
+approved peer UDP receive ended with Windows error 10060 after the test's 5-second
+read timeout; no Ack was observed.
+```
+
+## Failure-path criteria
+
+- **PASS — read-only preflight completed:** exact local and remote output is recorded above.
+- **FAIL — a live stream was established before interruption:** no exact client process or session existed.
+- **FAIL — 15-second interruption did not crash either process:** no interruption interval was run; the client was already absent.
+- **FAIL — server stayed alive throughout the interruption:** server was alive only at preflight; no interval observation was made.
+- **FAIL — client stayed alive throughout the interruption:** client was absent at preflight.
+- **FAIL — streaming resumed within 20 seconds:** no restoration or stream existed.
+- **FAIL — a strictly greater resumed Ack `session_id` was observed:** no Ack traffic existed.
+- **FAIL — server superseded the session while keeping capture running:** no prior/current session or capture diagnostics existed.
+- **FAIL — temporary interruption mechanism was reverted after use:** no mechanism was used; the applied-interruption branch was not exercised.
+- **PASS — this task left no temporary network mutation:** Wi-Fi remained `Up`, no adapter was disabled, no firewall block was created, and local UDP 6902 was `NONE`.
+
+## Non-simulation and cleanup receipt
+
+No fake Ack, fake session ID, mock streaming process, synthetic interruption, tray
+interaction, adapter disable, firewall block, scheduled task, client installation,
+remote rebuild, remote install, or service restart was used. Because the preflight
+found no genuine stream, the run stopped as required. Todo 22 remains unchecked and
+ no Todo 22 commit was created.
+
+---
+
+## 2026-08-23 live rerun — exact blocker receipt
+
+The required elevated PowerShell operation was unavailable at the mandatory
+preflight:
+
+```text
+PREFLIGHT_LOCAL_TIMESTAMP=2026-08-23T01:54:50.5519820+08:00
+WINDOWS_IDENTITY=
+daniel-gigabyte\daniel
+IS_ADMIN=False
+TASK=PRESENT
+TaskPath  : \wifimic\
+State     : Ready
+EXE_EXISTS=True
+FullName  : C:\Program Files\wifimic-client\wifimic_client.exe
+CLIENT_PROCESS_COUNT=0
+UDP_6902_COUNT=0
+TEMP_RULE_COLLISION_CHECK=
+COUNT=0
+```
+
+No `New-NetFirewallRule` or equivalent elevated block operation was attempted,
+because the current token was demonstrably non-administrator. No
+`Remove-NetFirewallRule` was needed because no temporary rule was created. No
+task run, Start/Heartbeat probe, Stop probe, helper, or tray interaction was
+performed.
+
+The Linux read-only preflight at `2026-08-23T01:54:07,672635541+08:00` found
+`wifimic-server=active`, PID `35138`, UDP `0.0.0.0:6902` listening, no `parec`,
+and the pinned source `SUSPENDED`. The canonical firewall read-back remained
+`wifimic-client`, inbound, Allow, UDP local port `6902`, remote peer
+`192.168.0.210`; the temporary rule name was absent.
+
+### Failure-path verdict
+
+- **BLOCKED:** real client stream, Start Ack, pre-interruption `session_id`, and
+  active capture were not established.
+- **BLOCKED:** the exactly 15-second interruption and restoration were not run.
+- **BLOCKED:** client/server survival, recovery within 20 seconds, fresh greater
+  `session_id`, supersession without `Idle`, and no capture restart are all
+  unobserved.
+- **PASS:** no tray action, adapter disable, firewall mutation, service mutation,
+  helper, or temporary rule was used or left behind.
+
+This is an exact privilege blocker, not a simulated pass. Todo 22 remains
+unchecked.
+
+---
+
+## 2026-08-23 elevated RunAs retry — exact unattended-UAC failure
+
+The prior `IS_ADMIN=False` observation was not treated as the stop condition.
+The required elevation method was attempted:
+
+```text
+ELEVATION_COMMAND=Start-Process powershell.exe -Verb RunAs -Wait -ArgumentList -NoProfile -ExecutionPolicy Bypass -File C:\Users\Daniel\AppData\Local\Temp\wifimic-todo22-elevated-20260823-024039.ps1 -TranscriptPath C:\Users\Daniel\AppData\Local\Temp\wifimic-todo22-elevated-20260823-024039-transcript.txt -PcapEtlPath C:\Users\Daniel\AppData\Local\Temp\wifimic-todo22-pktmon-20260823-024039.etl -PcapTextPath C:\Users\Daniel\AppData\Local\Temp\wifimic-todo22-pktmon-20260823-024039.txt -PcapNgPath C:\Users\Daniel\AppData\Local\Temp\wifimic-todo22-pktmon-20260823-024039.pcapng
+ELEVATION_PARENT_ERROR_TYPE=System.InvalidOperationException
+ELEVATION_PARENT_ERROR=�L�k����o�өR�O�A�]���o�Ϳ��~: �ާ@�Q�ϥΪ̨����C�C
+TRANSCRIPT_PATH=C:\Users\Daniel\AppData\Local\Temp\wifimic-todo22-elevated-20260823-024039-transcript.txt EXISTS=False
+HELPER_PATH=C:\Users\Daniel\AppData\Local\Temp\wifimic-todo22-elevated-20260823-024039.ps1 EXISTS=True
+ETL_PATH=C:\Users\Daniel\AppData\Local\Temp\wifimic-todo22-pktmon-20260823-024039.etl EXISTS=False
+PCAP_PATH=C:\Users\Daniel\AppData\Local\Temp\wifimic-todo22-pktmon-20260823-024039.pcapng EXISTS=False
+TEXT_PATH=C:\Users\Daniel\AppData\Local\Temp\wifimic-todo22-pktmon-20260823-024039.txt EXISTS=False
+```
+
+Because the parent returned before the child could start, no transcript header,
+`IS_ADMIN=True`, task trigger, UDP probe, firewall rule, or cleanup guard ran.
+
+At `2026-08-23T02:55:29.6717221+08:00`, a second minimal invocation with the
+same `RunAs`/`Wait` pattern hung without child output or an exception until the
+120-second shell timeout:
+
+```text
+ELEVATION_RETRY_TIMESTAMP=2026-08-23T02:55:29.6717221+08:00
+<shell_metadata>
+shell tool terminated command after exceeding timeout 120000 ms. If this command is expected to take longer and is not waiting for interactive input, retry with a larger timeout value in milliseconds.
+</shell_metadata>
+```
+
+This is the observed unattended UAC-consent blocker, after a real elevation
+attempt—not a conclusion from the default token check.
+
+### Result
+
+- **BLOCKED:** no Todo 22-owned Start Ack, session ID, active capture, 15-second interruption, restoration, recovery, supersession, or journal proof was produced.
+- **PASS:** no temporary firewall rule, packet-capture artifact, helper, or transcript remained.
+- **PASS:** pre-existing task cleanup left task `Ready`/enabled, client absent, server PID `35138` active, exact `parec` absent, and pinned source `SUSPENDED` at the final read-only check `2026-08-23T03:00:23,578163324+08:00`.
+
+Todo 22 remains **BLOCKED**. No acceptance pass is claimed.

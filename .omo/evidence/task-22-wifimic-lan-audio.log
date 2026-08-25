@@ -1,0 +1,383 @@
+# Todo 22 — real network-interruption/reconnect acceptance evidence
+# Captured 2026-08-22 from C:\Users\Daniel\Documents\opencode\wifimic.
+# Outcome: BLOCKED during read-only preflight; no interruption or host mutation was attempted.
+
+## Acceptance contract inspected before live action
+
+The plan requires an existing real two-host stream, an exactly 15-second network
+interruption, and resumption within 20 seconds after restoration through a fresh,
+strictly-greater `session_id` observed in real Ack traffic. The server must remain
+Streaming and capture must not be restarted. The interruption mechanism must be
+reverted and verified afterward.
+
+Codegraph inspection of the current implementation returned these exact timers and
+state rules:
+
+- Client `HEARTBEAT_INTERVAL = 5s`, `RECONNECT_RETRY_INTERVAL = 5s`,
+  `START_ACK_TIMEOUT = 5s`, and `MAX_MISSED_HEARTBEATS = 2`.
+- Client `mark_unreachable` schedules the next retry five seconds later;
+  `issue_start` mints a new session ID for every retry.
+- Server `HEARTBEAT_TIMEOUT = 30s`; `handle_start` accepts only a strictly newer
+  `SessionOrder` ID, changes `last_active_session_id`, and leaves capture running
+  when already `Streaming`.
+
+## Read-only preflight commands and literal output
+
+### Windows PowerShell 5.1
+
+Command: read-only PowerShell inspection of the canonical task, installation,
+client processes/commands, debug binary presence, adapters, matching firewall
+rules, and local UDP 6902 endpoints.
+
+```text
+PREFLIGHT_LOCAL_TIMESTAMP=2026-08-22T21:29:35.9712855+08:00
+WINDOWS_HOST=DANIEL-GIGABYTE
+WINDOWS_IDENTITY=
+daniel-gigabyte\daniel
+TASK_\wifimic\wifimic-client=ABSENT
+INSTALL_ROOT_EXISTS=False
+INSTALL_ROOT=ABSENT
+CLIENT_PROCESS_wifimic_client.exe=ABSENT
+CLIENT_PROCESS_wifimic-client.exe=ABSENT
+CLIENT_COMMAND_wifimic_client.exe=ABSENT
+CLIENT_COMMAND_wifimic-client.exe=ABSENT
+TARGET_ROOT_EXISTS=True
+
+FullName                                                                     Length LastWriteTime
+--------                                                                     ------ -------------
+C:\Users\Daniel\Documents\opencode\wifimic\target\debug\wifimic_client.exe 28274004 2026/8/22 19:54:14
+
+ADAPTERS=
+
+Relevant literal adapter output:
+Wi-Fi            Up           5       F4-26-79-6C-C2-44 433.3 Mbps Intel(R) Wi-Fi 6E AX211 160MHz
+
+WIFIMIC_FIREWALL_RULES=
+
+DisplayName        Enabled Direction Action Profile
+-----------        ------- --------- ------ -------
+wifimic_client.exe True    Inbound   Allow  Private
+wifimic_client.exe True    Inbound   Allow  Private
+
+UDP_6902_LOCAL_ENDPOINTS=
+UDP_6902_LOCAL_ENDPOINTS=NONE
+```
+
+The debug binary is a build artifact only. It is not the absent installed
+client/task/process and was not launched as a substitute. The two matching
+firewall rules were pre-existing read-only observations; no rule was added,
+removed, or blocked by this task.
+
+### Linux SSH
+
+Command: read-only SSH inspection of the user service, UDP listener, process,
+deployed ELF metadata, and recent service journal.
+
+```text
+PREFLIGHT_REMOTE_TIMESTAMP=2026-08-22T21:28:50,877624055+08:00
+REMOTE_HOST=arch-daniel
+SERVICE_ACTIVE=active
+ActiveState=active
+SubState=running
+FragmentPath=/home/daniel/.config/systemd/user/wifimic-server.service
+MainPID=33601
+ExecStart={ path=/home/daniel/.local/bin/wifimic_server ; argv[]=/home/daniel/.local/bin/wifimic_server ; ignore_errors=no ; start_time=[Sat 2026-08-22 16:45:01 CST] ; stop_time=[n/a] ; pid=33601 ; code=(null) ; status=0/0 }
+LISTENER_6902=UNCONN 0      0            0.0.0.0:6902       0.0.0.0:*    users:(("wifimic_server",pid=33601,fd=3))
+REMOTE_PROCESS=33601 /home/daniel/.local/bin/wifimic_server
+BINARY_STAT=/home/daniel/.local/bin/wifimic_server|2026-08-22 16:44:50.539301747 +0800|450624
+BINARY_SHA256=0f7b8036f0e75fe190a30caa11fae51f4cc8c567f18d271572ca4f60c5eab221  /home/daniel/.local/bin/wifimic_server
+RECENT_SERVICE_LOG=2026-08-22T16:09:55+08:00 arch-daniel systemd[678]: Stopped wifimic Linux microphone capture and UDP transmitter.
+2026-08-22T16:10:04+08:00 arch-daniel systemd[678]: Started wifimic Linux microphone capture and UDP transmitter.
+2026-08-22T16:10:04+08:00 arch-daniel (wifimic_server)[33304]: wifimic-server.service: Unable to locate executable '/home/daniel/.local/bin/wifimic_server': No such file or directory
+2026-08-22T16:10:04+08:00 arch-daniel (wifimic_server)[33304]: wifimic-server.service: Failed at step EXEC spawning /home/daniel/.local/bin/wifimic_server: No such file or directory
+2026-08-22T16:10:04+08:00 arch-daniel systemd[678]: wifimic-server.service: Main process exited, code=exited, status=203/EXEC
+2026-08-22T16:10:04+08:00 arch-daniel systemd[678]: wifimic-server.service: Failed with result 'exit-code'.
+2026-08-22T16:10:05+08:00 arch-daniel systemd[678]: Stopped wifimic Linux microphone capture and UDP transmitter.
+2026-08-22T16:45:01+08:00 arch-daniel systemd[678]: Started wifimic Linux microphone capture and UDP transmitter.
+```
+
+Prior real Start/Ack evidence from Todo 19 remains an independent blocker receipt:
+
+```text
+approved peer UDP receive ended with Windows error 10060 after the test's 5-second
+read timeout; no Ack was observed.
+```
+
+The active ELF is the stale deployment already documented by Todo 19; no rebuild,
+install, restart, firewall mutation, or service mutation was performed here.
+
+## Literal acceptance results
+
+- **PASS — read-only preflight:** PowerShell and SSH returned timestamped output.
+- **PASS — Linux service/listener preflight only:** service active, PID 33601, and UDP 6902 listening.
+- **PASS — local adapter safety before any hypothetical interruption:** Wi-Fi was `Up` on ifIndex 5.
+- **PASS — no temporary interruption mechanism applied:** no adapter was disabled and no firewall block/rule was created.
+- **FAIL — real streaming session before interruption:** both canonical client process names were `ABSENT`; no live Ack/session existed.
+- **FAIL — exactly 15-second network interruption:** not attempted because no genuine stream existed.
+- **FAIL — both processes remain running throughout interruption:** no client process or interruption interval existed to observe.
+- **FAIL — interruption mechanism fully reverted after an applied interruption:** no interruption was applied, so this post-interruption assertion was not exercised.
+- **PASS — no unsafe temporary state left by this task:** Wi-Fi remained `Up`; local UDP 6902 had `NONE`; matching firewall rules were only observed, not mutated.
+- **FAIL — streaming resumed within 20 seconds after restoration:** no restoration or resumed stream occurred.
+- **FAIL — resumed stream carried a NEW Ack `session_id`:** no real Ack traffic was observed.
+- **FAIL — resumed `session_id` was strictly greater than the prior ID:** no prior/resumed live IDs existed.
+- **FAIL — new session superseded the prior session without `Idle`:** no server session transition or capture diagnostics existed.
+- **FAIL — server capture never restarted:** no live session/capture diagnostics were available to prove this.
+- **FAIL — no tray interaction was needed for resumption:** no real client/tray session existed.
+
+## Stop decision
+
+The exact installed Windows client, canonical task, and client process are absent.
+The current remote listener is also the stale ELF that timed out on the real
+Start/Ack attempt. Establishing a truthful stream would require an unauthorized
+installation or remote deployment mutation. The test stopped at preflight; no
+network interruption was simulated and Todo 22 remains unchecked. The prescribed
+ Todo 22 commit must not be used.
+
+---
+
+## Live rerun — 2026-08-23 privileged preflight blocker
+
+Run timestamp: `2026-08-23T01:54:50.5519820+08:00` local; remote preflight timestamp:
+`2026-08-23T01:54:07,672635541+08:00`. No task start, UDP interruption, firewall
+mutation, helper, or Stop probe was attempted after the blocker was found.
+
+### Literal PowerShell 5.1 preflight output
+
+```text
+PREFLIGHT_LOCAL_TIMESTAMP=2026-08-23T01:54:50.5519820+08:00
+WINDOWS_HOST=DANIEL-GIGABYTE
+WINDOWS_IDENTITY=
+daniel-gigabyte\daniel
+IS_ADMIN=False
+TASK=PRESENT
+TaskName  : wifimic-client
+TaskPath  : \wifimic\
+State     : Ready
+LastRunTime        : 2026/8/23 01:43:53
+LastTaskResult     : 4294967295
+NextRunTime        :
+NumberOfMissedRuns : 0
+EXE_EXISTS=True
+FullName      : C:\Program Files\wifimic-client\wifimic_client.exe
+Length        : 2143374
+CLIENT_PROCESS_COUNT=0
+UDP_6902_COUNT=0
+CANONICAL_FIREWALL_RULES=
+Name          : wifimic-client
+DisplayName   : wifimic-client
+Enabled       : True
+Direction     : Inbound
+Action        : Allow
+Profile       : Any
+Protocol      : UDP
+LocalPort     : 6902
+RemotePort    : Any
+LocalAddress  : Any
+RemoteAddress : 192.168.0.210
+TEMP_RULE_COLLISION_CHECK=
+COUNT=0
+```
+
+The exact PowerShell operation was a read-only query using `Get-ScheduledTask`,
+`Get-ScheduledTaskInfo`, `Get-CimInstance`, `Get-NetUDPEndpoint`,
+`Get-NetFirewallRule`, `Get-NetFirewallPortFilter`, and
+`Get-NetFirewallAddressFilter`. The mandatory elevated operation could not be
+safely created because the current Windows token reported `IS_ADMIN=False`.
+No `New-NetFirewallRule` call was made; therefore no temporary rule existed to
+remove.
+
+### Literal Linux SSH preflight output
+
+```text
+PREFLIGHT_REMOTE_TIMESTAMP=2026-08-23T01:54:07,672635541+08:00
+REMOTE_HOST=arch-daniel
+SERVICE_ACTIVE=active
+ActiveState=active
+SubState=running
+MainPID=35138
+LISTENER_6902=UNCONN 0      0            0.0.0.0:6902       0.0.0.0:*    users:(("wifimic_server",pid=35138,fd=3))
+REMOTE_PROCESS=35138 /home/daniel/.local/bin/wifimic_server
+PAREC=
+CAPTURE_SOURCE=57	alsa_input.pci-0000_00_1b.0.analog-stereo	PipeWire	s32le 2ch 48000Hz	SUSPENDED
+BINARY_STAT=/home/daniel/.local/bin/wifimic_server|2026-08-23 01:11:59.056140684 +0800|567168
+BINARY_SHA256=b6483703b21637946dc1590a2cb9ccf558957e04116e4428cb9a74a12661f162  /home/daniel/.local/bin/wifimic_server
+JOURNAL_SINCE=2026-08-23T01:44:07+08:00
+-- No entries --
+```
+
+### Timestamped verdicts
+
+- **BLOCKED — canonical task Start Ack/session:** task was present and Ready, but
+  it was not started because the required elevated interruption mechanism was
+  unavailable. No real Start Ack or `session_id` was observed.
+- **BLOCKED — active Linux capture before interruption:** service/listener were
+  active at `01:54:07`; `parec` was absent and the pinned source was `SUSPENDED`.
+- **BLOCKED — exactly 15-second UDP 6902 interruption:** not attempted; no
+  temporary firewall rule was created.
+- **BLOCKED — client and server survival during interruption:** no interruption
+  interval existed; no client process was running, while server PID `35138` was
+  alive at preflight only.
+- **BLOCKED — restoration and recovery within 20 seconds:** no restoration or
+  live stream occurred.
+- **BLOCKED — fresh strictly-greater recovery `session_id`:** no pre- or
+  post-interruption session IDs existed.
+- **BLOCKED — server supersession without Idle/capture restart:** no streaming
+  session existed; no supersession or capture-restart evidence was generated.
+- **PASS — no tray interaction:** none was used.
+- **PASS — no temporary state left:** `TEMP_RULE_COLLISION_CHECK=COUNT=0`,
+  canonical rule remained inbound UDP Allow to peer `192.168.0.210`, task was
+  Ready/enabled, client count was zero, server was active, and capture was Idle
+  (`SUSPENDED`).
+
+### Stop decision
+
+Exact blocker: the current PowerShell token is not elevated (`IS_ADMIN=False`),
+so a narrowly scoped `New-NetFirewallRule` block cannot be safely created. The
+run stopped before any host mutation. Todo 22 is **BLOCKED**, not passed; there
+are no session IDs, interruption/recovery timings, or journal supersession
+records to claim.
+
+---
+
+## 2026-08-23 — elevated RunAs retry and exact unattended-UAC blocker
+
+Run window: `2026-08-23T02:40:39.0581900+08:00` journal start through
+`2026-08-23T03:00:23,578163324+08:00` remote final check. This section is appended;
+the earlier blocked-attempt records above remain unchanged.
+
+### Required elevation attempt — literal parent command and output
+
+The requested same-method invocation was actually attempted from the default
+non-elevated PowerShell shell. The full command text printed by the parent was:
+
+```text
+ELEVATION_COMMAND=Start-Process powershell.exe -Verb RunAs -Wait -ArgumentList -NoProfile -ExecutionPolicy Bypass -File C:\Users\Daniel\AppData\Local\Temp\wifimic-todo22-elevated-20260823-024039.ps1 -TranscriptPath C:\Users\Daniel\AppData\Local\Temp\wifimic-todo22-elevated-20260823-024039-transcript.txt -PcapEtlPath C:\Users\Daniel\AppData\Local\Temp\wifimic-todo22-pktmon-20260823-024039.etl -PcapTextPath C:\Users\Daniel\AppData\Local\Temp\wifimic-todo22-pktmon-20260823-024039.txt -PcapNgPath C:\Users\Daniel\AppData\Local\Temp\wifimic-todo22-pktmon-20260823-024039.pcapng
+ELEVATION_PARENT_ERROR_TYPE=System.InvalidOperationException
+ELEVATION_PARENT_ERROR=�L�k����o�өR�O�A�]���o�Ϳ��~: �ާ@�Q�ϥΪ̨����C�C
+TRANSCRIPT_PATH=C:\Users\Daniel\AppData\Local\Temp\wifimic-todo22-elevated-20260823-024039-transcript.txt EXISTS=False
+HELPER_PATH=C:\Users\Daniel\AppData\Local\Temp\wifimic-todo22-elevated-20260823-024039.ps1 EXISTS=True
+ETL_PATH=C:\Users\Daniel\AppData\Local\Temp\wifimic-todo22-pktmon-20260823-024039.etl EXISTS=False
+PCAP_PATH=C:\Users\Daniel\AppData\Local\Temp\wifimic-todo22-pktmon-20260823-024039.pcapng EXISTS=False
+TEXT_PATH=C:\Users\Daniel\AppData\Local\Temp\wifimic-todo22-pktmon-20260823-024039.txt EXISTS=False
+```
+
+The helper never reached its transcript header, `IS_ADMIN=True` check, task
+start, firewall mutation, UDP probe, or cleanup body. No `New-NetFirewallRule`
+call was made by this attempt.
+
+### Required elevation retry — literal unattended-UAC behavior
+
+At `2026-08-23T02:55:29.6717221+08:00`, a second minimal RunAs probe used the
+same required verb/wait pattern:
+
+```text
+ELEVATION_RETRY_TIMESTAMP=2026-08-23T02:55:29.6717221+08:00
+try { $p=Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList @('-NoProfile','-Command','Write-Output ELEVATED_PROBE_OK') }
+```
+
+It produced no child output and no returned exception. The shell tool's literal
+termination receipt was:
+
+```text
+<shell_metadata>
+shell tool terminated command after exceeding timeout 120000 ms. If this command is expected to take longer and is not waiting for interactive input, retry with a larger timeout value in milliseconds.
+</shell_metadata>
+```
+
+This is the exact observed unattended-UAC behavior: `Start-Process -Verb RunAs
+-Wait` remained blocked waiting for interactive consent and did not produce an
+elevated transcript. The required elevation was attempted; it was not inferred
+from the default `IS_ADMIN=False` check.
+
+### Read-only/pre-cleanup state around the failed elevation
+
+Before the attempt, the host was healthy but had a pre-existing session from an
+earlier run: task `Running`, client PID `23628`, local UDP 6902, Linux service
+PID `35138`, and capture PID `36768`. That session was not created by this Todo
+22 attempt. The literal relevant preflight was:
+
+```text
+BASELINE_LOCAL_TIMESTAMP=2026-08-23T02:44:11.5985959+08:00
+BASELINE_HOST=DANIEL-GIGABYTE
+BASELINE_IDENTITY=DANIEL-GIGABYTE\Daniel
+TASK=\wifimic\wifimic-client STATE=Running ENABLED=True LAST_RESULT=267009
+EXE_EXISTS=True
+CLIENT_PROCESS_COUNT=1
+CLIENT_PROCESS_PID=23628 COMMAND="C:\Program Files\wifimic-client\wifimic_client.exe"
+UDP_6902_COUNT=1
+CANONICAL_RULE_COUNT=1
+Name        : wifimic-client
+DisplayName : wifimic-client
+Enabled     : True
+Direction   : Inbound
+Action      : Allow
+Profile     : Any
+Protocol   : UDP
+LocalPort   : 6902
+RemotePort  : Any
+LocalAddress  : Any
+RemoteAddress : 192.168.0.210
+TEMP_RULE_COLLISION_COUNT=0
+SERVICE_STATE=active
+MainPID=35138
+UNCONN 0      0            0.0.0.0:6902       0.0.0.0:*    users:(('wifimic_server',pid=35138,fd=3))
+REMOTE_PROCESSES=35138 /home/daniel/.local/bin/wifimic_server
+36768 parec --raw --format=s16le --rate=48000 --channels=1 --latency-msec=5 --process-time-msec=5 --device=alsa_input.pci-0000_00_1b.0.analog-stereo
+```
+
+The prior running task was ended without tray interaction after the elevation
+blocker. Client count reached zero immediately; the remote capture stopped by
+`2026-08-23T02:59:28,356868914+08:00`, while server PID `35138` remained active.
+
+### Timestamped acceptance verdicts
+
+- **BLOCKED — elevated PowerShell child:** exact `Start-Process powershell.exe -Verb RunAs -Wait -ArgumentList ...` was attempted; the full helper call returned `System.InvalidOperationException`, and the minimal retry waited 120 seconds for unattended UAC consent. No elevated child transcript was produced.
+- **BLOCKED — canonical task Start Ack/session_id:** no Todo 22 child reached `schtasks.exe /Run`; no Todo 22 Start Ack or session ID exists. No fake ID is substituted.
+- **BLOCKED — active Linux capture before interruption:** the pre-existing session had active capture PID `36768`, but no Todo 22-owned canonical task session was established.
+- **BLOCKED — exactly 15-second UDP 6902 interruption:** not attempted because elevation did not complete; no temporary firewall rule was created.
+- **BLOCKED — client/server survival throughout interruption:** no Todo 22 interruption interval existed. The pre-existing client/server state was observed only before cleanup.
+- **BLOCKED — restoration and recovery within 20 seconds:** no restoration was run and no recovery event occurred.
+- **BLOCKED — fresh strictly-greater post-recovery session_id:** no pre/post Todo 22 session IDs exist.
+- **BLOCKED — server supersession without Idle/capture restart:** no Todo 22 supersession journal exists; the baseline server remained active and its pre-existing capture later became `IDLE` during cleanup.
+- **BLOCKED — no tray interaction needed for recovery:** no recovery occurred; no tray action was used.
+- **PASS — cleanup after the blocked attempt:** the temporary helper was removed; transcript/ETL/text/pcapng were absent; no temporary firewall rule remained; task was Ready/enabled; client and client UDP endpoint were absent; server remained active at PID `35138`; exact `parec` was absent; pinned source was `SUSPENDED`.
+
+### Final cleanup receipt — literal read-only output
+
+```text
+FINAL_POSTCHECK_TIMESTAMP=2026-08-23T03:00:17.4931460+08:00
+TASK_PRESENT=True STATE=Ready ENABLED=True LAST_RESULT=4294967295
+CLIENT_PROCESS_COUNT=0
+CLIENT_UDP_ENDPOINT_COUNT=0
+CANONICAL_RULE_COUNT=1
+Name        : wifimic-client
+DisplayName : wifimic-client
+Enabled     : True
+Direction   : Inbound
+Action      : Allow
+Profile     : Any
+Protocol   : UDP
+LocalPort   : 6902
+RemotePort  : Any
+LocalAddress  : Any
+RemoteAddress : 192.168.0.210
+TEMP_RULE_COUNT=0
+TEMP_ARTIFACT_wifimic-todo22-elevated-20260823-024039.ps1=False
+TEMP_ARTIFACT_wifimic-todo22-elevated-20260823-024039-transcript.txt=False
+TEMP_ARTIFACT_wifimic-todo22-pktmon-20260823-024039.etl=False
+TEMP_ARTIFACT_wifimic-todo22-pktmon-20260823-024039.txt=False
+TEMP_ARTIFACT_wifimic-todo22-pktmon-20260823-024039.pcapng=False
+2026-08-23T03:00:23,578163324+08:00
+active
+ActiveState=active
+SubState=running
+MainPID=35138
+NRestarts=0
+UNCONN 0      0            0.0.0.0:6902       0.0.0.0:*    users:(('wifimic_server',pid=35138,fd=3))
+PAREC_EXACT=CAPTURE_SOURCE=57	alsa_input.pci-0000_00_1b.0.analog-stereo	PipeWire	s32le 2ch 48000Hz	SUSPENDED
+JOURNAL=
+```
+
+No Todo 22 pass is claimed. The exact blocker is unattended UAC consent: the
+required RunAs child could not start in this shell context, so the live 15
+second interruption and automatic reconnect acceptance remain unchecked.
