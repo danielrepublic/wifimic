@@ -51,6 +51,24 @@ fn jitter_reorders_frames_and_reports_gap_late_duplicate() {
 }
 
 #[test]
+fn jitter_next_playout_ms_tracks_target_delay_then_advances_by_frame() {
+    let mut buffer = JitterBuffer::new();
+    assert_eq!(buffer.next_playout_ms(), None);
+
+    let _ = buffer.push(frame(10), 0);
+    assert_eq!(buffer.next_playout_ms(), Some(MIN_TARGET_DELAY_MS));
+
+    let _ = buffer.poll(MIN_TARGET_DELAY_MS);
+    assert_eq!(
+        buffer.next_playout_ms(),
+        Some(MIN_TARGET_DELAY_MS + FRAME_DURATION_MS)
+    );
+
+    buffer.clear();
+    assert_eq!(buffer.next_playout_ms(), None);
+}
+
+#[test]
 fn jitter_preserves_wrapping_sequence_order() {
     let mut buffer = JitterBuffer::new();
 

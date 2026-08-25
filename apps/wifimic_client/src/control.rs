@@ -304,6 +304,30 @@ where
         Ok(outcome)
     }
 
+    /// Returns the earliest instant `advance`/`render_ready` must next run.
+    ///
+    /// `None` means no control timer or jitter playout deadline is
+    /// currently pending (e.g. `Stopped`). Callers use this to size a
+    /// bounded socket read timeout instead of polling at a fixed short
+    /// interval regardless of whether any work is actually due.
+    #[must_use]
+    pub fn next_wakeup(&self) -> Option<Instant> {
+        let state_deadline = match self.state {
+            ClientState::Stopped => None,
+            ClientState::Establishing => self.start_deadline,
+            ClientState::Unreachable => self.next_retry,
+            ClientState::Streaming => [self.next_heartbeat, self.next_calibration_at]
+                .into_iter()
+                .flatten()
+                .min(),
+        };
+        let playout_deadline = self
+            .jitter
+            .next_playout_ms()
+            .map(|elapsed_ms| self.origin + Duration::from_millis(elapsed_ms));
+        [state_deadline, playout_deadline].into_iter().flatten().min()
+    }
+
     /// Returns the current lifecycle state.
     #[must_use]
     pub const fn state(&self) -> ClientState {

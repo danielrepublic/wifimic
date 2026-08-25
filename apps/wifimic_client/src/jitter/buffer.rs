@@ -136,6 +136,15 @@ impl JitterBuffer {
         self.target_delay_ms
     }
 
+    /// Returns the next playout deadline in elapsed-origin milliseconds, if any.
+    ///
+    /// Callers use this to size a bounded wait instead of polling the
+    /// renderer-facing `poll` on a fixed short interval.
+    #[must_use]
+    pub const fn next_playout_ms(&self) -> Option<u64> {
+        self.next_playout_ms
+    }
+
     /// Returns the number of resident, not-yet-played FIFO frames.
     #[must_use]
     pub fn buffered_frames(&self) -> usize {

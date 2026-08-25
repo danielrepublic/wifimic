@@ -354,3 +354,78 @@ fn control_rejects_stale_calibration_reply_sequence() {
     assert_eq!(stale, InboundOutcome::CalibrationRejected);
     assert!(matches!(accepted, InboundOutcome::Calibrated { .. }));
 }
+
+#[test]
+fn control_next_wakeup_tracks_the_start_deadline_while_establishing() {
+    // Given
+    let origin = Instant::now();
+    let mut client = client(origin);
+
+    // When
+    let _ = client.start(origin, 90_000).expect("Start must send");
+
+    // Then
+    assert_eq!(client.next_wakeup(), Some(origin + super::START_ACK_TIMEOUT));
+}
+
+#[test]
+fn control_next_wakeup_tracks_the_earliest_streaming_deadline() {
+    // Given
+    let origin = Instant::now();
+    let mut client = client(origin);
+    let session_id = client.start(origin, 91_000).expect("Start must send");
+    let _ = ack(&mut client, session_id, wifimic_protocol::START_TAG, origin);
+    let frame = AudioFrame::new(session_id, 1, [0; wifimic_protocol::PCM_PAYLOAD_BYTES]);
+    let packet = encode_audio_frame(&frame);
+    let _ = client
+        .receive_datagram(SOURCE, &packet, origin)
+        .expect("approved audio must decode");
+
+    // Then: the jitter playout slot (origin + 40ms) precedes the 5s
+    // heartbeat and recalibration deadlines.
+    assert_eq!(
+        client.next_wakeup(),
+        Some(origin + Duration::from_millis(40))
+    );
+}
+
+#[test]
+fn control_next_wakeup_tracks_the_retry_deadline_once_unreachable() {
+    // Given
+    let origin = Instant::now();
+    let mut client = client(origin);
+    let session_id = client.start(origin, 92_000).expect("Start must send");
+    let _ = ack(&mut client, session_id, wifimic_protocol::START_TAG, origin);
+
+    // When
+    client
+        .advance(origin + Duration::from_secs(5), 92_005)
+        .expect("first heartbeat must send");
+    client
+        .advance(origin + Duration::from_secs(10), 92_010)
+        .expect("second heartbeat must send");
+
+    // Then
+    assert!(client.is_unreachable());
+    assert_eq!(
+        client.next_wakeup(),
+        Some(origin + Duration::from_secs(10) + super::RECONNECT_RETRY_INTERVAL)
+    );
+}
+
+#[test]
+fn control_next_wakeup_is_none_once_stopped() {
+    // Given
+    let origin = Instant::now();
+    let mut client = client(origin);
+    let session_id = client.start(origin, 93_000).expect("Start must send");
+    let _ = ack(&mut client, session_id, wifimic_protocol::START_TAG, origin);
+
+    // When
+    client
+        .stop(origin + Duration::from_secs(1))
+        .expect("Stop must send");
+
+    // Then
+    assert_eq!(client.next_wakeup(), None);
+}

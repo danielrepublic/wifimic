@@ -245,3 +245,44 @@ fn control_superseding_start_during_streaming_does_not_restart_capture() {
     assert_eq!(FakeCapture::starts(&state), 1);
     assert_eq!(FakeCapture::stops(&state), 0);
 }
+
+#[test]
+fn control_read_timeout_blocks_indefinitely_while_idle() {
+    // Given
+    let (plane, _state, _collector, origin) = plane(vec![true]);
+
+    // Then
+    assert_eq!(plane.read_timeout(origin, Duration::from_millis(1)), None);
+}
+
+#[test]
+fn control_read_timeout_bounds_to_the_pending_capture_retry_while_starting() {
+    // Given
+    let (mut plane, _state, _collector, origin) = plane(vec![false, true]);
+    let _ = command(&mut plane, ControlMessage::Start { session_id: 80 }, origin);
+    assert_eq!(plane.state(), ControlState::Starting);
+
+    // Then
+    assert_eq!(
+        plane.read_timeout(origin, Duration::from_millis(1)),
+        Some(CAPTURE_RETRY_INTERVAL)
+    );
+    assert_eq!(
+        plane.read_timeout(origin + CAPTURE_RETRY_INTERVAL, Duration::from_millis(1)),
+        Some(Duration::from_millis(1))
+    );
+}
+
+#[test]
+fn control_read_timeout_keeps_the_tight_poll_while_streaming() {
+    // Given
+    let (mut plane, _state, _collector, origin) = plane(vec![true]);
+    let _ = command(&mut plane, ControlMessage::Start { session_id: 81 }, origin);
+    assert_eq!(plane.state(), ControlState::Streaming);
+
+    // Then
+    assert_eq!(
+        plane.read_timeout(origin, Duration::from_millis(1)),
+        Some(Duration::from_millis(1))
+    );
+}

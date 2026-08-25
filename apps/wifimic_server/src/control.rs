@@ -124,6 +124,30 @@ where
         Ok(())
     }
 
+    /// Returns the socket read timeout appropriate for the current state.
+    ///
+    /// `Idle` has no pending timer, so the caller may block indefinitely
+    /// (`None`) until a datagram arrives. `Starting` bounds the wait to the
+    /// pending capture retry. `Streaming` returns `streaming_poll`
+    /// unchanged: `next_audio_frame`'s blocking capture-process read
+    /// already paces the loop to the real audio frame rate, and returning
+    /// to it promptly matters more than reducing wakeups while frames are
+    /// actively flowing.
+    #[must_use]
+    pub fn read_timeout(&self, now: Instant, streaming_poll: Duration) -> Option<Duration> {
+        match self.state {
+            ControlState::Idle => None,
+            ControlState::Starting => Some(
+                self.next_retry_at
+                    .map_or(streaming_poll, |deadline| {
+                        deadline.saturating_duration_since(now)
+                    })
+                    .max(streaming_poll),
+            ),
+            ControlState::Streaming => Some(streaming_poll),
+        }
+    }
+
     fn handle_message_without_advance(
         &mut self,
         message: ControlMessage,

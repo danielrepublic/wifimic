@@ -44,8 +44,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 const CALIBRATION_PROBE_COUNT: u32 = 4;
 const MAX_ROUND_TRIP_RETRY_ATTEMPTS: u32 = 10;
 const CALIBRATION_READ_TIMEOUT: Duration = Duration::from_secs(1);
+/// The minimum bound on the adaptive socket read timeout in the main loop.
+///
+/// Guards against a zero-duration `set_read_timeout` (which panics) when a
+/// control timer or jitter playout deadline is already due.
 #[cfg(target_os = "windows")]
-const RECEIVE_POLL_INTERVAL: Duration = Duration::from_millis(1);
+const CLIENT_READ_TIMEOUT_FLOOR: Duration = Duration::from_millis(1);
+/// The maximum bound on the adaptive socket read timeout in the main loop.
+///
+/// Bounds tray-menu responsiveness (Restart/Exit) and how quickly a fresh
+/// connection is noticed when no control timer is currently pending.
+#[cfg(target_os = "windows")]
+const CLIENT_READ_TIMEOUT_CEILING: Duration = Duration::from_millis(50);
 
 fn run_calibration() -> Result<(), CalibrationCliError> {
     use std::net::{Ipv4Addr, SocketAddr};
@@ -167,7 +177,6 @@ fn run_windows_client() -> Result<(), Box<dyn std::error::Error>> {
     let tray = tray::TrayRuntime::new()?;
     let origin = Instant::now();
     let socket = UdpClientSocket::bind()?;
-    socket.set_read_timeout(Some(RECEIVE_POLL_INTERVAL))?;
     let renderer = Renderer::open(RenderConfig::vb_cable())?;
     let mut control = ControlPlane::new(socket, renderer, origin);
     let epoch_ms = || {
@@ -188,6 +197,17 @@ fn run_windows_client() -> Result<(), Box<dyn std::error::Error>> {
                 break;
             }
         }
+        // Block only until the next actionable deadline (a control timer or
+        // a jitter playout slot), capped so tray interaction stays
+        // responsive. This replaces a fixed 1ms poll that woke this thread
+        // ~1000 times/second even at full idle, which kept the core out of
+        // deep sleep states and contributed to sustained fan noise.
+        let wait = control
+            .next_wakeup()
+            .map(|deadline| deadline.saturating_duration_since(now))
+            .unwrap_or(CLIENT_READ_TIMEOUT_CEILING)
+            .clamp(CLIENT_READ_TIMEOUT_FLOOR, CLIENT_READ_TIMEOUT_CEILING);
+        control.transport().set_read_timeout(Some(wait))?;
         match control.receive_once(now) {
             Ok(Some(InboundOutcome::DroppedUnapprovedSource))
             | Ok(Some(InboundOutcome::IgnoredAck { .. }))

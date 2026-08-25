@@ -38,13 +38,19 @@ where
     C: CaptureController,
 {
     let mut socket = network::UdpServerSocket::bind()?;
-    socket.set_read_timeout(Some(RECEIVE_POLL_INTERVAL))?;
     let diagnostics = EventContext::logging(Instant::now());
     let mut control = ControlPlane::new(capture, diagnostics);
     let mut peer: Option<SocketAddr> = None;
     let mut sequence = 0_u32;
 
     loop {
+        // Block only as long as the current state needs: indefinitely while
+        // idle, bounded to the pending capture retry while starting, and at
+        // the tight poll interval while streaming so the loop returns
+        // promptly to the blocking capture-process read that paces audio.
+        // This replaces a fixed 1ms poll that spun the idle loop at
+        // ~1000 iterations/second even with no client connected.
+        socket.set_read_timeout(control.read_timeout(Instant::now(), RECEIVE_POLL_INTERVAL))?;
         match socket.receive_once() {
             Ok(Some(datagram)) => {
                 if datagram.payload.first() == Some(&CALIBRATION_PROBE_TAG) {
