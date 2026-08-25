@@ -429,8 +429,15 @@ function Invoke-WifimicClientUpdate {
     }
     Assert-WifimicPreflight -Operations $Operations -Identity $identity -Task $priorTask -Executable $priorExecutable
 
-    $stageRoot = Join-Path $identity.InstallRoot ('.wifimic-client-stage-' + [Guid]::NewGuid().ToString('N'))
-    $transactionRoot = Join-Path $identity.InstallRoot ('.wifimic-client-transaction-' + [Guid]::NewGuid().ToString('N'))
+    # Stage on the same volume as InstallRoot (required for the atomic
+    # File.Replace/Move swap below) but outside any path containing a space.
+    # `cargo build` compiles assets/tray-icon.rc via embed-resource/windres,
+    # which mishandles a space in the build path (e.g. "Program Files") and
+    # fails with a truncated/garbled output path. $env:ProgramData is on the
+    # same drive as the canonical install root and has no spaces.
+    $stagingVolumeRoot = Join-Path $env:ProgramData 'wifimic-client'
+    $stageRoot = Join-Path $stagingVolumeRoot ('stage-' + [Guid]::NewGuid().ToString('N'))
+    $transactionRoot = Join-Path $stagingVolumeRoot ('transaction-' + [Guid]::NewGuid().ToString('N'))
     $candidatePath = Join-Path $stageRoot ('target\release\' + $identity.ExecutableName)
     $failure = $null
     $worktreeAdded = $false
