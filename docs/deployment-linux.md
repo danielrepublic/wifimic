@@ -234,7 +234,21 @@ cp target/release/wifimic_server ~/.local/bin/
 systemctl --user restart wifimic-server
 ```
 
-### 9.2 復原防火牆規則
+### 9.2 手動更新與自我檢查指令
+
+安裝完成後，`wifimic_server` 二進位檔內建下列一次性管理子指令，無需重新執行安裝腳本，亦非自動/背景更新機制——皆為使用者手動叫用的單次指令。
+
+| 指令 | 用途 | 備註 |
+|------|------|------|
+| `wifimic_server -v` / `wifimic_server --version` | 顯示目前安裝的內建版本號 | 僅輸出版本字串，結束代碼 0 |
+| `wifimic_server check-update` | 查詢 GitHub 最新公開版本，不下載、不安裝 | 成功時結束代碼 0；輸出三種情況之一：<br>• `目前版本 vX.Y.Z 已是最新版本`<br>• `有新版本可用：vX.Y.Z → vA.B.C，執行 \`wifimic_server upgrade\` 進行更新`<br>• `目前版本 vX.Y.Z 比最新版本 vA.B.C 更新`<br>失敗時結束代碼 1，輸出 `更新檢查失敗：<錯誤>` |
+| `wifimic_server upgrade [--tag vX.Y.Z]` | 手動觸發更新：下載、驗證、替換二進位檔並重啟服務 | **使用者手動執行的一次性指令**。<br>• 不加 `--tag` 時自動抓取最新版本；已是最新則不動作（輸出 `已是最新版本`）。<br>• 過程：停止服務 → 備份舊二進位檔 → 原子替換 → 重啟服務 → 等待最多 45 秒服務回報 `active`。<br>• **失敗會自動回滾**：任何替換後步驟失敗皆嘗試還原備份並重啟服務；回滾也失敗時會在錯誤訊息中同時呈現原始失敗與回滾失敗。<br>• 成功輸出 `已更新至 vX.Y.Z`，結束代碼 0；失敗結束代碼 1。 |
+| `wifimic_server status` | 查看服務目前的 active/enabled 狀態與版本 | 輸出格式：`版本：vX.Y.Z；wifimic-server active=active enabled=enabled`。直接查詢 `systemctl --user is-active/enabled wifimic-server`。 |
+| `wifimic_server doctor` | 一次性自我檢查：服務健康、PipeWire 擷取來源、防火牆規則 | 執行三項檢查並逐項輸出 `PASS`/`FAIL`：<br>1. `wifimic-server active` — 服務是否為 `active`<br>2. `pinned PipeWire source` — `alsa_input.pci-0000_00_1b.0.analog-stereo` 是否存在於 `pactl list short sources`<br>3. `UDP 6902 firewall rule` — `nftables` 或 `iptables` 規則集中是否含 UDP 6902 允許規則<br>全部通過結束代碼 0，任一失敗結束代碼非 0。 |
+
+> **注意**：`upgrade` 會呼叫 `systemctl --user stop/restart wifimic-server`，需在使用者工作階段中執行（已啟用 `loginctl enable-linger` 即可）。不需要 `sudo`。
+
+### 9.3 復原防火牆規則
 
 **UFW**：
 
@@ -262,7 +276,7 @@ sudo iptables-save | sudo tee /etc/iptables/iptables.rules >/dev/null
 sudo systemctl restart iptables.service
 ```
 
-### 9.3 完整移除部署
+### 9.4 完整移除部署
 
 ```bash
 # 停用並移除 systemd 使用者單元
@@ -281,7 +295,7 @@ loginctl disable-linger daniel
 
 ---
 
-## 10. 關鍵數值對照表
+## 11. 關鍵數值對照表
 
 | 項目 | 數值 | 來源 |
 |------|------|------|
@@ -295,7 +309,7 @@ loginctl disable-linger daniel
 
 ---
 
-## 11. 限制與已知問題
+## 12. 限制與已知問題
 
 1. **無第三方 LAN 來源驗證**：部署環境僅有 `192.168.0.200` 一個對等端，port-scoped deny 計數器未經實測遞增；規則邏輯經程式碼審查確認正確。
 2. **非乾淨主機狀態**：`arch-daniel` 已有既有套件與服務狀態，本指南未涵蓋全新安裝情境；若在乾淨主機部署，請先安裝 `pipewire`、`wireplumber`、`rustup` 等基礎套件。
@@ -304,7 +318,7 @@ loginctl disable-linger daniel
 
 ---
 
-## 12. 參考檔案
+## 13. 參考檔案
 
 - `deploy/systemd/wifimic-server.service` — systemd 使用者單元定義
 - `deploy/linux/wifimic-server-firewall.sh` — 防火牆部署主腳本（含後端選擇邏輯）

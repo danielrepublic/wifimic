@@ -1,0 +1,13 @@
+[package]
+name = "wifimic_update"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+semver = "1"
+thiserror = "2"
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+
+[lints]
+workspace = true

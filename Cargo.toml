@@ -2,6 +2,7 @@
 members = [
     "crates/wifimic_protocol",
     "crates/wifimic_diagnostics",
+    "crates/wifimic_update",
     "apps/wifimic_server",
     "apps/wifimic_client",
 ]

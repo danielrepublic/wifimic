@@ -1,7 +1,16 @@
 pub mod capture;
+mod cli;
 pub mod control;
 mod diagnostic_capture;
+mod doctor;
 mod network;
+mod status;
+mod update_cli;
+mod upgrade;
+mod upgrade_native;
+#[cfg(test)]
+#[path = "upgrade_test_support.rs"]
+mod upgrade_test_support;
 
 use std::io;
 use std::net::SocketAddr;
@@ -14,19 +23,110 @@ use wifimic_protocol::{
 };
 
 use crate::capture::CaptureHandle;
+use crate::cli::{parse_command, CliParseError, Command};
 use crate::control::{CaptureController, ControlError, ControlPlane};
 use crate::diagnostic_capture::LatencyDiagnosticCapture;
+use crate::doctor::{run_doctor, NativeCaptureSourceQueries, NativeFirewallQueries};
+use crate::status::{run_status, NativeServiceQueries};
+use crate::update_cli::{
+    check_update_exit_code, render_check_update, run_check_update, NativeTagDiscovery,
+};
+use crate::upgrade::{run_upgrade, NativeUpgradeOperations};
 
+const WIFIMIC_SERVER_VERSION: &str = env!("WIFIMIC_SERVER_VERSION");
 const RECEIVE_POLL_INTERVAL: Duration = Duration::from_millis(1);
 
-fn main() -> std::io::Result<()> {
+fn main() -> std::process::ExitCode {
+    match run_main() {
+        Ok(()) => std::process::ExitCode::SUCCESS,
+        Err(MainError::CheckUpdate(error)) => {
+            let result = Err(error);
+            println!("{}", render_check_update(&result));
+            if check_update_exit_code(&result) == 0 {
+                std::process::ExitCode::SUCCESS
+            } else {
+                std::process::ExitCode::FAILURE
+            }
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            std::process::ExitCode::FAILURE
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+enum MainError {
+    #[error("could not initialize logging: {0}")]
+    Logging(#[source] io::Error),
+    #[error("{0}")]
+    Cli(#[from] CliParseError),
+    #[error("update check failed: {0}")]
+    CheckUpdate(#[from] wifimic_update::UpdateError),
+    #[error("upgrade failed: {0}")]
+    Upgrade(#[from] crate::upgrade::UpgradeError),
+    #[error("status failed: {0}")]
+    Status(#[from] crate::status::StatusError),
+    #[error("doctor failed: {0}")]
+    Doctor(#[source] io::Error),
+    #[error("service failed: {0}")]
+    Service(#[source] io::Error),
+}
+
+fn run_main() -> Result<(), MainError> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
         .try_init()
-        .map_err(io::Error::other)?;
-    if std::env::args().any(|argument| argument == "--calibrate") {
+        .map_err(io::Error::other)
+        .map_err(MainError::Logging)?;
+    match parse_command(std::env::args())? {
+        Command::Service {
+            calibrate,
+            diagnose_latency,
+        } => run_service(calibrate, diagnose_latency).map_err(MainError::Service),
+        Command::Version => {
+            println!("{WIFIMIC_SERVER_VERSION}");
+            Ok(())
+        }
+        Command::CheckUpdate => {
+            let result = run_check_update(&NativeTagDiscovery, WIFIMIC_SERVER_VERSION)?;
+            println!("{}", result.render());
+            Ok(())
+        }
+        Command::Upgrade { tag } => {
+            let mut operations = NativeUpgradeOperations;
+            let result = run_upgrade(&mut operations, tag.as_deref(), WIFIMIC_SERVER_VERSION)?;
+            println!("{}", result.render());
+            Ok(())
+        }
+        Command::Status => {
+            let report = run_status(&NativeServiceQueries, WIFIMIC_SERVER_VERSION)?;
+            println!("{}", report.render());
+            Ok(())
+        }
+        Command::Doctor => {
+            let report = run_doctor(
+                &NativeServiceQueries,
+                &NativeCaptureSourceQueries,
+                &NativeFirewallQueries,
+                WIFIMIC_SERVER_VERSION,
+            );
+            print!("{}", report.render());
+            if report.all_passed() {
+                Ok(())
+            } else {
+                Err(MainError::Doctor(io::Error::other(
+                    "one or more checks failed",
+                )))
+            }
+        }
+    }
+}
+
+fn run_service(calibrate: bool, diagnose_latency: bool) -> io::Result<()> {
+    if calibrate {
         eprintln!("calibration responder enabled");
     }
-    if std::env::args().any(|argument| argument == "--diagnose-latency") {
+    if diagnose_latency {
         eprintln!("latency diagnostic capture enabled on the pinned parec source");
         return run_server(LatencyDiagnosticCapture::new());
     }

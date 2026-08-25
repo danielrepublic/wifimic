@@ -28,6 +28,15 @@ The installer verifies the Linux archive SHA-256, installs the user service, ena
 
 To install a specific release rather than the latest, download the release installer and pass its tag as the first argument.
 
+#### Manual updates
+
+An already-installed server can check for and apply updates without re-running the install one-liner:
+
+- `wifimic_server check-update` — queries GitHub for a newer release (reports only, does not install)
+- `wifimic_server upgrade [--tag vX.Y.Z]` — downloads, verifies, and installs a release with automatic rollback on failure
+
+These are manual, one-shot commands invoked by the user — not an automatic background update mechanism.
+
 ## Verification
 
 Start the Windows client, select `CABLE Output (VB-Audio Virtual Cable)` as the microphone in Discord, and verify normal speech cadence. For detailed operational and network requirements, see [docs/deployment.md](docs/deployment.md).
