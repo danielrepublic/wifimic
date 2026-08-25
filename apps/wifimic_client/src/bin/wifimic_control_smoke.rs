@@ -1,11 +1,12 @@
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr, ToSocketAddrs, UdpSocket};
 use std::num::ParseIntError;
-use std::time::{Duration, SystemTime, SystemTimeError, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, SystemTimeError, UNIX_EPOCH};
 
 use thiserror::Error;
 use wifimic_protocol::{
-    decode_control, encode_control, ControlMessage, HEARTBEAT_TAG, START_TAG, STOP_TAG,
+    decode_control, encode_control, ControlMessage, AUDIO_PACKET_BYTES, HEARTBEAT_TAG, START_TAG,
+    STOP_TAG,
 };
 
 const READ_TIMEOUT: Duration = Duration::from_secs(2);
@@ -75,7 +76,6 @@ impl<'a> SmokeClient<'a> {
     }
 
     fn run(&self, session_id: u64) -> Result<(), SmokeError> {
-        self.socket.set_read_timeout(Some(self.read_timeout))?;
         self.exchange(ControlMessage::Start { session_id }, START_TAG)?;
         self.exchange(ControlMessage::Heartbeat { session_id }, HEARTBEAT_TAG)?;
         self.exchange(ControlMessage::Stop { session_id }, STOP_TAG)
@@ -89,26 +89,39 @@ impl<'a> SmokeClient<'a> {
             | ControlMessage::Ack { session_id, .. } => session_id,
         };
         self.socket.send_to(&encode_control(&request), self.peer)?;
-        let mut packet = [0_u8; 64];
-        let (received, source) = self.socket.recv_from(&mut packet)?;
-        if source != self.peer {
-            return Err(SmokeError::UnexpectedSource { peer: source });
-        }
-        match decode_control(&packet[..received])? {
-            ControlMessage::Ack {
-                session_id: actual_session_id,
-                acked_kind: actual_kind,
-            } if actual_session_id == session_id && actual_kind == expected_kind => Ok(()),
-            ControlMessage::Ack {
-                session_id: actual_session_id,
-                acked_kind: actual_kind,
-            } => Err(SmokeError::MismatchedAck {
-                expected_session_id: session_id,
-                expected_kind,
-                actual_session_id,
-                actual_kind,
-            }),
-            response => Err(SmokeError::UnexpectedResponse(response)),
+        let deadline = Instant::now() + self.read_timeout;
+        let mut packet = [0_u8; AUDIO_PACKET_BYTES];
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(io::Error::from(io::ErrorKind::TimedOut).into());
+            }
+            self.socket.set_read_timeout(Some(remaining))?;
+            let (received, source) = self.socket.recv_from(&mut packet)?;
+            if source != self.peer {
+                return Err(SmokeError::UnexpectedSource { peer: source });
+            }
+            match decode_control(&packet[..received]) {
+                Ok(ControlMessage::Ack {
+                    session_id: actual_session_id,
+                    acked_kind: actual_kind,
+                }) if actual_session_id == session_id && actual_kind == expected_kind => {
+                    return Ok(())
+                }
+                Ok(ControlMessage::Ack {
+                    session_id: actual_session_id,
+                    acked_kind: actual_kind,
+                }) => {
+                    return Err(SmokeError::MismatchedAck {
+                        expected_session_id: session_id,
+                        expected_kind,
+                        actual_session_id,
+                        actual_kind,
+                    });
+                }
+                Ok(response) => return Err(SmokeError::UnexpectedResponse(response)),
+                Err(_) => {}
+            }
         }
     }
 }
@@ -166,114 +179,5 @@ fn main() -> Result<(), SmokeError> {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::io;
-    use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
-    use std::thread::{self, JoinHandle};
-    use std::time::Duration;
-
-    use wifimic_protocol::{decode_control, encode_control, ControlMessage};
-
-    use super::{SmokeClient, SmokeError};
-
-    #[derive(Debug, Clone, Copy)]
-    enum ResponderMode {
-        Matching,
-        Missing,
-        Mismatched,
-    }
-
-    fn spawn_responder(mode: ResponderMode) -> (SocketAddr, JoinHandle<()>) {
-        let socket = UdpSocket::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0_u16)))
-            .expect("test responder must bind");
-        let address = socket
-            .local_addr()
-            .expect("test responder must have an address");
-        let handle = thread::spawn(move || {
-            let exchanges = match mode {
-                ResponderMode::Matching => 3,
-                ResponderMode::Missing | ResponderMode::Mismatched => 1,
-            };
-            for _ in 0..exchanges {
-                let mut packet = [0_u8; 64];
-                let (received, source) = socket
-                    .recv_from(&mut packet)
-                    .expect("test responder must receive a request");
-                let request = decode_control(&packet[..received]).expect("request must decode");
-                let (session_id, acked_kind) = match request {
-                    ControlMessage::Start { session_id } => {
-                        (session_id, wifimic_protocol::START_TAG)
-                    }
-                    ControlMessage::Heartbeat { session_id } => {
-                        (session_id, wifimic_protocol::HEARTBEAT_TAG)
-                    }
-                    ControlMessage::Stop { session_id } => (session_id, wifimic_protocol::STOP_TAG),
-                    ControlMessage::Ack { .. } => panic!("smoke client must not send Ack"),
-                };
-                let response = match mode {
-                    ResponderMode::Matching => Some(ControlMessage::Ack {
-                        session_id,
-                        acked_kind,
-                    }),
-                    ResponderMode::Missing => None,
-                    ResponderMode::Mismatched => Some(ControlMessage::Ack {
-                        session_id: session_id.saturating_add(1),
-                        acked_kind,
-                    }),
-                };
-                if let Some(response) = response {
-                    socket
-                        .send_to(&encode_control(&response), source)
-                        .expect("test responder must send an acknowledgement");
-                }
-            }
-        });
-        (address, handle)
-    }
-
-    fn run_test(mode: ResponderMode, session_id: u64) -> Result<(), SmokeError> {
-        let (peer, responder) = spawn_responder(mode);
-        let socket = UdpSocket::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0_u16)))
-            .expect("smoke client must bind");
-        let result = SmokeClient::new(&socket, peer, Duration::from_millis(20)).run(session_id);
-        responder.join().expect("test responder must finish");
-        result
-    }
-
-    #[test]
-    fn smoke_succeeds_with_three_matching_acknowledgements() {
-        // Given
-        // When
-        let result = run_test(ResponderMode::Matching, 41);
-
-        // Then
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn smoke_fails_when_acknowledgement_is_missing() {
-        // Given
-        // When
-        let result = run_test(ResponderMode::Missing, 42);
-
-        // Then
-        assert!(matches!(
-            result,
-            Err(SmokeError::Transport(error))
-                if matches!(
-                    error.kind(),
-                    io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock
-                )
-        ));
-    }
-
-    #[test]
-    fn smoke_fails_when_acknowledgement_session_mismatches() {
-        // Given
-        // When
-        let result = run_test(ResponderMode::Mismatched, 43);
-
-        // Then
-        assert!(matches!(result, Err(SmokeError::MismatchedAck { .. })));
-    }
-}
+#[path = "../wifimic_control_smoke_tests.rs"]
+mod tests;
