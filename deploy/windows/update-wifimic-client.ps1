@@ -194,7 +194,14 @@ function ConvertTo-WifimicTaskDefinition {
     [xml]$xml = $XmlText
     $command = (Get-WifimicXmlNode -Xml $xml -XPath '//task:Actions/task:Exec/task:Command').InnerText
     $workingDirectory = (Get-WifimicXmlNode -Xml $xml -XPath '//task:Actions/task:Exec/task:WorkingDirectory').InnerText
-    $arguments = (Get-WifimicXmlNode -Xml $xml -XPath '//task:Actions/task:Exec/task:Arguments').InnerText
+    # Task Scheduler drops a genuinely empty <Arguments/> element on export, so
+    # a task registered with no CLI arguments (the normal wifimic-client case)
+    # has no Arguments node at all. Treat its absence as an empty string
+    # instead of the mandatory-node error the other Exec fields use.
+    $manager = New-Object System.Xml.XmlNamespaceManager($xml.NameTable)
+    $manager.AddNamespace('task', $script:TaskNamespace)
+    $argumentsNode = $xml.SelectSingleNode('//task:Actions/task:Exec/task:Arguments', $manager)
+    $arguments = if ($null -eq $argumentsNode) { '' } else { $argumentsNode.InnerText }
     $uri = (Get-WifimicXmlNode -Xml $xml -XPath '//task:RegistrationInfo/task:URI').InnerText
     [pscustomobject]@{
         TaskPath = $Identity.TaskPath
