@@ -383,7 +383,12 @@ Get-PnpDevice -Class AudioEndpoint -Status OK | Where-Object { $_.FriendlyName -
 ### 6.1 先決條件
 
 - 來源倉庫為乾淨狀態（無未追蹤/修改檔案）
-- `WIFIMIC_CONTROL_SMOKE_HELPER` 環境變數指向**可執行的絕對路徑**，該輔助程式必須能從 **Windows 對等端 (192.168.0.200)** 發起完整的 Start/Heartbeat/Stop Ack 交換，並輸出 `wifimic-control-smoke: PASS`
+- Linux 已安裝 `ssh`、`base64`，且 `deploy/linux/wifimic-control-smoke-helper.sh` 可執行
+- Linux 對 Windows `daniel@192.168.0.200` 已完成反向 SSH 信任：使用金鑰登入可在 `BatchMode=yes` 下成功，並已將 Windows 主機金鑰加入 `known_hosts`；不可依賴密碼或 agent forwarding
+- 若 `daniel` 屬於 Windows Administrators，Linux 公鑰必須放在 `C:\ProgramData\ssh\administrators_authorized_keys`，並符合 OpenSSH 對該檔案的 ACL 要求
+- Windows 對等端已在 `C:\Users\Daniel\Documents\opencode\wifimic` 建置煙霧測試執行檔：`cargo build --release --bin wifimic_control_smoke`；預設路徑為 `C:\Users\Daniel\Documents\opencode\wifimic\target\release\wifimic_control_smoke.exe`
+- `WIFIMIC_CONTROL_SMOKE_HELPER` 環境變數指向**可執行的絕對路徑**，該輔助程式必須能從 **Windows 對等端 (192.168.0.200)** 發起完整的 Start/Heartbeat/Stop Ack 交換，並輸出遠端執行檔的 `wifimic-control-smoke: PASS`
+- 如使用其他穩定的絕對 Windows 執行檔路徑，設定 `WIFIMIC_WINDOWS_SMOKE_EXE` 覆寫預設值
 - 使用者服務 `wifimic-server` 目前為 `active`
 - 現有二進位檔 `~/.local/bin/wifimic_server` 存在且可執行
 - 現有使用者單元 `~/.config/systemd/user/wifimic-server.service` 存在
@@ -394,15 +399,24 @@ Get-PnpDevice -Class AudioEndpoint -Status OK | Where-Object { $_.FriendlyName -
 
 ```bash
 cd ~/src/wifimic
-WIFIMIC_CONTROL_SMOKE_HELPER=/path/to/peer-smoke-helper \
+chmod +x ./deploy/linux/wifimic-control-smoke-helper.sh
+WIFIMIC_CONTROL_SMOKE_HELPER="$PWD/deploy/linux/wifimic-control-smoke-helper.sh" \
 ./deploy/linux/update-wifimic-server.sh v1.2.3
 ```
 
 或指定提交雜湊：
 
 ```bash
-WIFIMIC_CONTROL_SMOKE_HELPER=/path/to/peer-smoke-helper \
+WIFIMIC_CONTROL_SMOKE_HELPER="$PWD/deploy/linux/wifimic-control-smoke-helper.sh" \
 ./deploy/linux/update-wifimic-server.sh a1b2c3d4e5f6
+```
+
+若煙霧測試執行檔不在預設路徑，可同時指定另一個穩定的絕對 Windows 路徑：
+
+```bash
+WIFIMIC_WINDOWS_SMOKE_EXE='D:\wifimic\target\release\wifimic_control_smoke.exe' \
+WIFIMIC_CONTROL_SMOKE_HELPER="$PWD/deploy/linux/wifimic-control-smoke-helper.sh" \
+./deploy/linux/update-wifimic-server.sh v1.2.3
 ```
 
 ### 6.3 更新流程內部步驟（供審計參考）
