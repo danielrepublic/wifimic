@@ -17,6 +17,7 @@ $ErrorActionPreference = 'Stop'
 
 $script:CanonicalInstallRoot = 'C:\Program Files\wifimic-client'
 $script:CanonicalExecutableName = 'wifimic_client.exe'
+$script:CanonicalUpdaterExecutableName = 'wifimic_client_updater.exe'
 $script:CanonicalTaskFolder = '\wifimic\'
 $script:CanonicalTaskName = 'wifimic-client'
 $script:CanonicalTaskPath = '\wifimic\wifimic-client'
@@ -84,6 +85,8 @@ function Get-WifimicIdentity {
         InstallRoot = $script:CanonicalInstallRoot
         ExecutableName = $script:CanonicalExecutableName
         ExecutablePath = Join-Path $script:CanonicalInstallRoot $script:CanonicalExecutableName
+        UpdaterExecutableName = $script:CanonicalUpdaterExecutableName
+        UpdaterExecutablePath = Join-Path $script:CanonicalInstallRoot $script:CanonicalUpdaterExecutableName
         TaskFolder = $script:CanonicalTaskFolder
         TaskName = $script:CanonicalTaskName
         TaskPath = $script:CanonicalTaskPath
@@ -403,10 +406,12 @@ function Restore-WifimicTransaction {
         [pscustomobject]$PriorTask,
         [pscustomobject]$PriorFirewall,
         [pscustomobject]$PriorExecutable,
+        [pscustomobject]$PriorUpdater,
         [pscustomobject]$PriorMarker,
         [bool]$TaskChanged,
         [bool]$FirewallChanged,
         [bool]$ExecutableChanged,
+        [bool]$UpdaterChanged,
         [bool]$MarkerChanged,
         [bool]$InstallRootCreated
     )
@@ -443,6 +448,14 @@ function Restore-WifimicTransaction {
             }
             else {
                 Invoke-WifimicOperation -Operations $Operations -Name 'RestoreFile' -Arguments @($Identity.ExecutablePath, $PriorExecutable.Bytes) | Out-Null
+            }
+        }
+        if ($UpdaterChanged) {
+            if ($null -eq $PriorUpdater) {
+                Invoke-WifimicOperation -Operations $Operations -Name 'RemoveFile' -Arguments @($Identity.UpdaterExecutablePath) | Out-Null
+            }
+            else {
+                Invoke-WifimicOperation -Operations $Operations -Name 'RestoreFile' -Arguments @($Identity.UpdaterExecutablePath, $PriorUpdater.Bytes) | Out-Null
             }
         }
         if ($InstallRootCreated) {
@@ -486,6 +499,11 @@ function Restore-WifimicTransaction {
             Throw-WifimicInstallerError -Code 'RollbackVerification' -Message 'The prior executable was not restored exactly.'
         }
 
+        $currentUpdater = Invoke-WifimicOperation -Operations $Operations -Name 'CaptureFile' -Arguments @($Identity.UpdaterExecutablePath)
+        if (-not (Test-WifimicFileCaptureEqual -Actual $currentUpdater -Expected $PriorUpdater)) {
+            Throw-WifimicInstallerError -Code 'RollbackVerification' -Message 'The prior updater executable was not restored exactly.'
+        }
+
         $currentMarker = Invoke-WifimicOperation -Operations $Operations -Name 'CaptureFile' -Arguments @($Identity.MarkerFilePath)
         if (-not (Test-WifimicFileCaptureEqual -Actual $currentMarker -Expected $PriorMarker)) {
             Throw-WifimicInstallerError -Code 'RollbackVerification' -Message 'The prior marker file was not restored exactly.'
@@ -511,14 +529,20 @@ function Invoke-WifimicInstall {
 
     $identity = Get-WifimicIdentity -Endpoint $RenderEndpoint
     $source = Resolve-WifimicClientExecutable -Path $ClientExecutable
+    $updaterSource = Join-Path (Split-Path -Parent $source) $script:CanonicalUpdaterExecutableName
+    if (-not (Test-Path -LiteralPath $updaterSource -PathType Leaf)) {
+        Throw-WifimicInstallerError -Code 'MissingUpdater' -Message "Updater executable was not found: '$updaterSource'."
+    }
     $firewall = New-WifimicFirewallSignature -Identity $identity
     $priorTask = $null
     $priorFirewall = $null
     $priorExecutable = $null
+    $priorUpdater = $null
     $priorMarker = $null
     $taskChanged = $false
     $firewallChanged = $false
     $executableChanged = $false
+    $updaterChanged = $false
     $markerChanged = $false
     $installRootCreated = $false
     $stageRoot = $null
@@ -527,6 +551,7 @@ function Invoke-WifimicInstall {
         $priorTask = Invoke-WifimicOperation -Operations $Operations -Name 'GetTask' -Arguments @($identity)
         $priorFirewall = Invoke-WifimicOperation -Operations $Operations -Name 'GetFirewall' -Arguments @($identity)
         $priorExecutable = Invoke-WifimicOperation -Operations $Operations -Name 'CaptureFile' -Arguments @($identity.ExecutablePath)
+        $priorUpdater = Invoke-WifimicOperation -Operations $Operations -Name 'CaptureFile' -Arguments @($identity.UpdaterExecutablePath)
         $priorMarker = Invoke-WifimicOperation -Operations $Operations -Name 'CaptureFile' -Arguments @($identity.MarkerFilePath)
         Assert-WifimicPreexistingState -Task $priorTask -Firewall $priorFirewall -Executable $priorExecutable -Identity $identity -ExpectedFirewall $firewall
 
@@ -567,6 +592,9 @@ function Invoke-WifimicInstall {
         Invoke-WifimicOperation -Operations $Operations -Name 'CopyFile' -Arguments @((Join-Path $stageRoot $identity.ExecutableName), $identity.ExecutablePath) | Out-Null
         $executableChanged = $true
         Invoke-WifimicFailurePoint -Requested $FailurePoint -Point 'AfterExecutableCopy'
+        Invoke-WifimicOperation -Operations $Operations -Name 'CopyFile' -Arguments @($updaterSource, (Join-Path $stageRoot $identity.UpdaterExecutableName)) | Out-Null
+        Invoke-WifimicOperation -Operations $Operations -Name 'CopyFile' -Arguments @((Join-Path $stageRoot $identity.UpdaterExecutableName), $identity.UpdaterExecutablePath) | Out-Null
+        $updaterChanged = $true
 
         $markerSource = Join-Path (Split-Path -Parent $source) $identity.MarkerFileName
         if (Test-Path -LiteralPath $markerSource -PathType Leaf) {
@@ -617,7 +645,7 @@ function Invoke-WifimicInstall {
         $failureRecord = $_
         $failure = $_.Exception
         try {
-            Restore-WifimicTransaction -Operations $Operations -Identity $identity -PriorTask $priorTask -PriorFirewall $priorFirewall -PriorExecutable $priorExecutable -PriorMarker $priorMarker -TaskChanged $taskChanged -FirewallChanged $firewallChanged -ExecutableChanged $executableChanged -MarkerChanged $markerChanged -InstallRootCreated $installRootCreated
+            Restore-WifimicTransaction -Operations $Operations -Identity $identity -PriorTask $priorTask -PriorFirewall $priorFirewall -PriorExecutable $priorExecutable -PriorUpdater $priorUpdater -PriorMarker $priorMarker -TaskChanged $taskChanged -FirewallChanged $firewallChanged -ExecutableChanged $executableChanged -UpdaterChanged $updaterChanged -MarkerChanged $markerChanged -InstallRootCreated $installRootCreated
         }
         catch {
             throw (New-WifimicInstallerException -Code 'RollbackFailed' -Message "Install failed with '$($failure.Message)' at '$($failureRecord.ScriptStackTrace)' and rollback failed with '$($_.Exception.Message)' at '$($_.ScriptStackTrace)'." -InnerException $failure)
