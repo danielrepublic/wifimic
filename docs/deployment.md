@@ -29,7 +29,7 @@
 | Linux systemd 使用者單元路徑 | `~/.config/systemd/user/wifimic-server.service` | `deploy/linux/update-wifimic-server.sh:7` |
 | Linux 更新腳本 | `deploy/linux/update-wifimic-server.sh` | — |
 | Windows 安裝腳本 | `deploy/windows/install-wifimic-client.ps1` | — |
-| Windows 更新腳本 | `deploy/windows/update-wifimic-client.ps1` | — |
+| Windows 更新工具 | `C:\Program Files\wifimic-client\wifimic_client_updater.exe`（安裝目錄內雙擊執行，無需額外腳本路徑） | ADR `docs/adr/0001-windows-update-moves-from-source-build-to-self-updater-binary.md` |
 
 ---
 
@@ -463,87 +463,91 @@ journalctl --user -u wifimic-server -f
 
 ## 7. Windows 用戶端更新
 
-更新腳本 `deploy/windows/update-wifimic-client.ps1` 採用**單一明確標籤/提交**、**乾淨工作區**、**先抓取再解析**、**git worktree 隔離建置**、**停用任務→原子替換→還原任務→啟動任務→健康檢查**、**自動回滾**機制。
+自 v0.2.0 起，Windows 用戶端更新改由 `wifimic_client_updater.exe`（自更新二進位檔）執行，取代先前的 PowerShell 更新腳本（見 ADR `docs/adr/0001-windows-update-moves-from-source-build-to-self-updater-binary.md`）。該程式與 `wifimic_client.exe` 共存於 `C:\Program Files\wifimic-client\` 安裝目錄，雙擊即可檢查 GitHub latest release 並完成更新，無需命令列參數，無需原始碼、`git`、`cargo` 等開發工具。
+
+> **不對稱性說明**：與 Linux 端的 `wifimic_server upgrade --tag vX.Y.Z` 不同，`wifimic_client_updater.exe` **不接受任何命令列參數**，僅針對目前 GitHub 上的 latest release 進行更新——無法指定精確標籤。因此版本發布流程中的 Windows 端驗證，只能確認「已安裝 latest」，無法像 Linux 端一樣驗證特定剛發布的標籤版本。
 
 ### 7.1 先決條件
 
-- 來源倉庫為乾淨狀態（`git status --porcelain --untracked-files=all` 為空）
-- 規範排程工作 `\wifimic\wifimic-client` **存在且啟用**，狀態為 `Ready` 或 `Running`
-- 已安裝執行檔 `C:\Program Files\wifimic-client\wifimic_client.exe` 存在
+- `wifimic_client_updater.exe` 已安裝於 `C:\Program Files\wifimic-client\`（由第 5 節首次安裝流程建立）
+- `C:\Program Files\wifimic-client\wifimic_client.exe` 存在（更新程式自動偵測其姊妹路徑）
 - `CABLE Input (VB-Audio Virtual Cable)` 端點可列舉
-- 原生模式需：**系統管理員互動式工作階段** + `-AcceptHostMutation`
+- 具備系統管理員權限的互動式工作階段（UAC 授權需要；更新程式內嵌 `requireAdministrator` 資源檔）
+
+> **一次性安裝注意**：若機器從未安裝過 v0.2.0（即 `wifimic_client_updater.exe` 尚不存在於安裝目錄），必須先執行一次完整安裝流程（README 一鍵安裝指令或 `deploy/windows/install-wifimic-client.ps1`，見第 5 節），使 `wifimic_client_updater.exe` 存在後，才能改用雙擊更新。此為一次性步驟：之後的版本更新只需雙擊更新程式即可。
 
 ### 7.2 執行更新
 
-```powershell
-cd C:\src\wifimic
-.\deploy\windows\update-wifimic-client.ps1 -Tag v1.2.3 -AcceptHostMutation
+以**系統管理員身分**開啟檔案總管或命令提示字元，雙擊或執行：
+
+```
+C:\Program Files\wifimic-client\wifimic_client_updater.exe
 ```
 
-或指定提交雜湊：
+更新程式**不接受任何命令列參數**（傳入任何參數會導致程式以退出碼 2 結束並輸出錯誤訊息）。程式會：
 
-```powershell
-.\deploy\windows\update-wifimic-client.ps1 -Tag a1b2c3d4e5f6 -AcceptHostMutation
-```
+1. 輸出 `檢查中...`
+2. 解析 GitHub 上的最新 release 標籤
+3. 與目前安裝版本（編譯時寫入的 `WIFIMIC_CLIENT_VERSION` 值）比較
 
-### 7.3 測試模式（隔離驗證）
+### 7.3 UAC 授權與拒絕行為
 
-```powershell
-.\deploy\windows\update-wifimic-client.ps1 -Tag v1.2.3 -TestMode
-```
+更新程式內嵌 Windows UAC `requireAdministrator` 資源檔（`assets/updater-manifest.rc`），因此在執行時會觸發 Windows 原生的「使用者帳戶控制」授權對話框。
 
-輸出 JSON 含 `FakeEvents`、`PriorExecutableRestored`（回滾驗證）、`TaskXmlPreserved` 等欄位；暫存目錄自動清理。
+- **核准**：程式以系統管理員權限繼續執行更新流程。
+- **拒絕**：Windows 會取消該程式——UAC 拒絕發生在 `main()` 函式之前，因此**不會有任何應用程式層級的訊息、不會修改任何檔案、不會變更任何排程工作狀態**。使用者僅看到 Windows 原生的取消對話框，程式直接結束。
 
-> **FailurePoint 測試**：`-FailurePoint` 參數可注入確定性失敗點（`DirtyCheckout`、`BadRevision`、`AmbiguousRevision`、`Fetch`、`Worktree`、`Build`、`Endpoint`、`DisableTask`、`StopTask`、`BeforeAtomicSwap`、`AtomicSwap`、`AfterAtomicSwap`、`SetTask`、`TaskRegistration`、`StartTask`、`Health`），僅限 `-TestMode` 使用。
+> 此行為取代了先前 PowerShell 更新腳本的 `-TestMode` / `-FailurePoint` 參數測試機制；更新程式無測試模式。
 
 ### 7.4 更新流程內部步驟（供審計參考）
 
-1. 驗證修訂文字格式（非空、無前後空白、非選項開頭、無空白/NUL、無 Git 複合語法）
-2. `GetSourceStatus`：檢查工作區乾淨度
-3. `FetchTags`：`git fetch --tags --prune origin`
-4. `ResolveRevision`：`git rev-parse --verify --end-of-options <tag>^{commit}` → 單一 40 字元 SHA
-5. 捕獲先前任務 XML、啟用狀態、執行檔位元組/SHA256
-6. 前置檢查：任務啟用、狀態可用、執行檔存在、端點可列舉
-7. 建立暫存目錄（`.wifimic-client-stage-<guid>`）、交易目錄（`.wifimic-client-transaction-<guid>`）
-8. `git worktree add --detach` 至暫存目錄
-9. `cargo build --release --locked -p wifimic_client` 在 worktree 內建置
-10. 捕獲候選執行檔 SHA256，驗證非空
-11. 再次前置檢查（建置期間未被竄改）
-12. 寫入交易位元組（先前執行檔備份）
-13. **任務變更開始**：停用任務 → 若 Running 則停止任務並等待非 Running
-14. **二進位變更開始**：同磁碟區原子替換（`File.Replace` / `File.Move`）
-15. 還原任務 XML（先前版本）、啟用任務、啟動任務
-16. 健康檢查輪詢：任務啟用、狀態 Ready/Running、端點可列舉（若先前 Running 則需 Running）
-17. 成功：輸出新/舊 SHA256、修訂、任務狀態；失敗：自動回滾
+1. 驗證無命令列參數（有則退出碼 2）
+2. 輸出 `檢查中...`，解析 GitHub latest release 標籤
+3. 比較目標標籤與編譯時版本 `WIFIMIC_CLIENT_VERSION`；若相同，輸出 `已是最新版本` 並退出（無任何系統狀態變更）
+4. 輸出 `發現新版本，更新中...`
+5. 下載 `wifimic-windows-x86_64.zip` 及其 `.sha256` 校驗檔，驗證 SHA-256 完整性，解壓縮至暫存目錄
+6. 備份目前 `wifimic_client.exe` 至唯一暫存路徑（`wifimic_client.backup.<pid>-<timestamp>`）
+7. 擷取排程工作 `\wifimic\wifimic-client` 的 XML 定義、啟用狀態、執行狀態（`TaskSnapshot`）
+8. **停用排程工作** → 若先前為 Running 則**停止排程工作**並等待非 Running
+9. 同磁碟區原子替換：複製新 `wifimic_client.exe` 至暫存路徑 → `rename` 至安裝路徑（`C:\Program Files\wifimic-client\wifimic_client.exe`）
+10. 還原先前排程工作 XML 定義、還原啟用狀態、若先前 Running 則啟動排程工作
+11. 健康檢查：排程工作啟用且狀態 Ready/Running、`CABLE Input (VB-Audio Virtual Cable)` 端點可列舉（逾時 45 秒）
+12. 成功：輸出 `已更新至 {tag}`；失敗：觸發自動回滾
 
-### 7.5 自動回滾行為
+### 7.5 自動回滾機制
 
-若任務/二進位變更已開始且後續步驟失敗：
+從步驟 8（停用排程工作）開始，若任一後續步驟失敗，更新程式會自動執行回滾：
 
-1. 停止目前任務（若 Running 先 Stop 並等待）
-2. 原子還原先前執行檔位元組
-3. 還原先前任務 XML、啟用任務、若先前 Running 則啟動
-4. 驗證：執行檔 SHA256 還原、任務 XML 完全一致、啟用狀態、狀態 Ready/Running、若先前 Running 則為 Running
-5. 清理 worktree、暫存、交易目錄
-6. 輸出 `RollbackFailed` 或成功回滾訊息
+1. **還原先前執行檔**：將備份的 `wifimic_client.exe` 複製回安裝路徑
+2. **還原先前排程工作**：以備份的 XML 定義重新建立排程工作，還原啟用狀態
+3. **重啟排程工作**：僅當更新前排程工作為 Running 時才啟動
+
+回滾完成後，更新程式報告以下其中一種結果：
+
+| 結果 | 程式輸出 | 退出碼 | 含義 |
+|------|----------|--------|------|
+| `RolledBack` | `更新失敗：更新未完成，已還原先前版本` | 1 | 更新失敗，但回滾成功——執行檔與排程工作皆已還原至更新前狀態 |
+| `RollbackVerificationFailed` | `更新失敗：更新失敗且無法確認還原狀態` | 1 | 更新失敗，且回滾過程中某一步驟亦失敗——需要手動介入還原 |
+| `Err` | `更新失敗：{error}` | 1 | 更新在前置階段（下載、解壓縮等）失敗，尚未開始修改系統狀態，無需回滾 |
+
+所有結果均會在末尾輸出 `請按 Enter 鍵結束...` 並等待使用者按 Enter 後才退出。
 
 ### 7.6 更新後驗證
 
 ```powershell
-# 1. 排程工作存在、啟用、狀態 Ready/Running
+# 1. 排程工作存在且啟用，狀態 Ready 或 Running
 Get-ScheduledTask -TaskPath '\wifimic\' -TaskName 'wifimic-client' | Select-Object TaskPath, TaskName, State, Settings
 
-# 2. 執行檔 SHA256 已變更
+# 2. 執行檔存在且 SHA256 已變更（與更新前比對）
 $bytes = [System.IO.File]::ReadAllBytes('C:\Program Files\wifimic-client\wifimic_client.exe')
 $sha = [System.Security.Cryptography.SHA256]::Create()
 [BitConverter]::ToString($sha.ComputeHash($bytes)).Replace('-', '').ToLowerInvariant()
 
 # 3. 端點仍可列舉
 Get-PnpDevice -Class AudioEndpoint -Status OK | Where-Object { $_.FriendlyName -eq 'CABLE Input (VB-Audio Virtual Cable)' }
-
-# 4. 即時觀察（若有 journal 等效機制）
-# 目前以排程工作狀態與端點存在為主要可觀測指標
 ```
+
+若更新前排程工作為 Running，則更新後應仍為 Running；若更新前非 Running，則更新後應為 Ready。
 
 ---
 
@@ -725,7 +729,7 @@ Remove-Item -LiteralPath 'C:\Program Files\wifimic-client' -Recurse -Force
 - `deploy/linux/wifimic-server.nft` — nftables 規則集
 - `deploy/linux/update-wifimic-server.sh` — Linux 伺服器更新腳本
 - `deploy/windows/install-wifimic-client.ps1` — Windows 用戶端安裝腳本
-- `deploy/windows/update-wifimic-client.ps1` — Windows 用戶端更新腳本
+- `wifimic_client_updater.exe` — Windows 用戶端自更新二進位檔（安裝於 `C:\Program Files\wifimic-client\`，雙擊執行，詳見第 7 節）
 - `apps/wifimic_server/src/capture_types.rs` — 固定捕獲源與 `parec` 參數
 - `apps/wifimic_server/src/network.rs` — UDP 連接埠、對等端 IP、來源 IP 驗證邏輯
 - `apps/wifimic_client/src/lib.rs` — Windows 端點列舉、渲染管線

@@ -1,0 +1,13 @@
+Task 5 (FINAL) — v0-2-0-update-mechanism
+=========================================
+Happy-path evidence: wifimic_client_updater.exe references in docs
+
+grep -c "wifimic_client_updater.exe" docs/deployment.md docs/release-process.md
+
+docs/deployment.md: 7
+docs/release-process.md: 2
+
+Both >0 — PASS
+
+cargo build --workspace --locked: PASS (Finished in 3.84s)
+cargo test --workspace --locked: PASS (182 tests, 0 failures, 7 ignored)
