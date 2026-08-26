@@ -74,15 +74,11 @@ impl UpdaterOperations for NativeUpdaterOperations {
 
     fn get_task(&mut self) -> Result<TaskSnapshot, UpdaterError> {
         let xml = run_schtasks("get_task_xml", ["/Query", "/TN", TASK_PATH, "/XML"])?;
-        let state = run_schtasks(
-            "get_task_state",
-            ["/Query", "/TN", TASK_PATH, "/FO", "LIST", "/V"],
-        )?;
         let xml = String::from_utf8(xml.stdout).map_err(|error| UpdaterError::Task {
             operation: "get_task_xml",
             message: error.to_string(),
         })?;
-        let state = parse_task_state(&String::from_utf8_lossy(&state.stdout));
+        let state = query_task_state()?;
         Ok(TaskSnapshot::new(xml, state.enabled, state.running))
     }
 
@@ -101,15 +97,18 @@ impl UpdaterOperations for NativeUpdaterOperations {
             timestamp()
         ));
         let result = (|| {
-            let mut file = fs::File::create(&temporary).map_err(|error| UpdaterError::Task {
-                operation: "restore_task",
-                message: error.to_string(),
-            })?;
-            file.write_all(snapshot.xml().as_bytes())
-                .map_err(|error| UpdaterError::Task {
-                    operation: "restore_task",
-                    message: error.to_string(),
-                })?;
+            {
+                let mut file =
+                    fs::File::create(&temporary).map_err(|error| UpdaterError::Task {
+                        operation: "restore_task",
+                        message: error.to_string(),
+                    })?;
+                file.write_all(&task_xml_bytes(snapshot.xml()))
+                    .map_err(|error| UpdaterError::Task {
+                        operation: "restore_task",
+                        message: error.to_string(),
+                    })?;
+            }
             run_schtasks(
                 "restore_task",
                 vec![
@@ -172,11 +171,7 @@ impl UpdaterOperations for NativeUpdaterOperations {
     fn wait_for_healthy(&mut self, timeout: Duration) -> Result<bool, UpdaterError> {
         let deadline = Instant::now() + timeout;
         loop {
-            let state = run_schtasks(
-                "health_task_state",
-                ["/Query", "/TN", TASK_PATH, "/FO", "LIST", "/V"],
-            )?;
-            let state = parse_task_state(&String::from_utf8_lossy(&state.stdout));
+            let state = query_task_state()?;
             if state.enabled && state.ready && self.check_render_endpoint_enumerable()? {
                 return Ok(true);
             }
@@ -200,8 +195,12 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
+    let args = args
+        .into_iter()
+        .map(|argument| argument.as_ref().to_owned())
+        .collect::<Vec<_>>();
     let output = Command::new("schtasks.exe")
-        .args(args)
+        .args(&args)
         .output()
         .map_err(|error| UpdaterError::Task {
             operation,
@@ -229,23 +228,78 @@ fn command_output_message(output: &Output) -> String {
     output.status.to_string()
 }
 
-fn parse_task_state(output: &str) -> TaskState {
-    let enabled = task_value(output, "Scheduled Task State:")
-        .is_some_and(|value| value.eq_ignore_ascii_case("Enabled"));
-    let status = task_value(output, "Status:");
-    TaskState {
-        enabled,
-        running: status.is_some_and(|value| value.eq_ignore_ascii_case("Running")),
-        ready: status.is_some_and(|value| {
-            value.eq_ignore_ascii_case("Ready") || value.eq_ignore_ascii_case("Running")
-        }),
+fn query_task_state() -> Result<TaskState, UpdaterError> {
+    let output = Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            r#"$task = Get-ScheduledTask -TaskPath '\wifimic\' -TaskName 'wifimic-client' -ErrorAction Stop; Write-Output ([int]$task.Settings.Enabled); Write-Output ([string]$task.State)"#,
+        ])
+        .output()
+        .map_err(|error| UpdaterError::Task {
+            operation: "get_task_state",
+            message: error.to_string(),
+        })?;
+    if !output.status.success() {
+        return Err(UpdaterError::Task {
+            operation: "get_task_state",
+            message: command_output_message(&output),
+        });
     }
+    parse_task_state_output(&String::from_utf8_lossy(&output.stdout))
 }
 
-fn task_value<'a>(output: &'a str, label: &str) -> Option<&'a str> {
-    output
+fn parse_task_state_output(output: &str) -> Result<TaskState, UpdaterError> {
+    let mut values = output
         .lines()
-        .find_map(|line| line.trim_start().strip_prefix(label).map(str::trim))
+        .map(str::trim)
+        .filter(|line| !line.is_empty());
+    let enabled = match values.next() {
+        Some("1") => true,
+        Some("0") => false,
+        Some(value) => {
+            return Err(UpdaterError::Task {
+                operation: "get_task_state",
+                message: format!("unexpected enabled value: {value}"),
+            });
+        }
+        None => {
+            return Err(UpdaterError::Task {
+                operation: "get_task_state",
+                message: "missing enabled value".to_owned(),
+            });
+        }
+    };
+    let status = match values.next() {
+        Some("Ready") => (false, true),
+        Some("Running") => (true, true),
+        Some(value) => {
+            return Err(UpdaterError::Task {
+                operation: "get_task_state",
+                message: format!("unexpected task state: {value}"),
+            });
+        }
+        None => {
+            return Err(UpdaterError::Task {
+                operation: "get_task_state",
+                message: "missing task state".to_owned(),
+            });
+        }
+    };
+    Ok(TaskState {
+        enabled,
+        running: status.0,
+        ready: status.1,
+    })
+}
+
+fn task_xml_bytes(xml: &str) -> Vec<u8> {
+    let mut bytes = vec![0xFF, 0xFE];
+    for code_unit in xml.encode_utf16() {
+        bytes.extend_from_slice(&code_unit.to_le_bytes());
+    }
+    bytes
 }
 
 fn client_install_path() -> &'static Path {
@@ -260,4 +314,43 @@ fn timestamp() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |duration| duration.as_nanos())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_task_state_output, task_xml_bytes};
+
+    #[test]
+    fn restore_task_serializes_declared_utf16_xml() {
+        // Given
+        let xml = "<?xml version=\"1.0\" encoding=\"UTF-16\"?>\r\n<Task/>";
+
+        // When
+        let bytes = task_xml_bytes(xml);
+
+        // Then
+        assert_eq!(&bytes[..2], &[0xFF, 0xFE]);
+        let code_units = bytes[2..]
+            .chunks_exact(2)
+            .map(|chunk| u16::from_le_bytes([chunk[0], chunk[1]]))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            String::from_utf16(&code_units).expect("UTF-16 bytes decode"),
+            xml
+        );
+    }
+
+    #[test]
+    fn parses_locale_independent_task_state_output() {
+        // Given
+        let output = "1\r\nReady\r\n";
+
+        // When
+        let state = parse_task_state_output(output).expect("task state parses");
+
+        // Then
+        assert!(state.enabled);
+        assert!(!state.running);
+        assert!(state.ready);
+    }
 }
