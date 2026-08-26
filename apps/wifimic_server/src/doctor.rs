@@ -1,9 +1,13 @@
+use std::fs;
 use std::process::Command;
 
 use crate::status::{ServiceProperty, ServiceQueries, StatusError};
 
 const PINNED_SOURCE: &str = "alsa_input.pci-0000_00_1b.0.analog-stereo";
 const FIREWALL_PORT: &str = "6902";
+const UFW_RULES_PATH: &str = "/etc/ufw/user.rules";
+const UFW_ALLOW_RULE: &str = "-A ufw-user-input -p udp --dport 6902 -s 192.168.0.200 -j ACCEPT";
+const UFW_DENY_RULE: &str = "-A ufw-user-input -p udp --dport 6902 -j DROP";
 
 /// Reports failures from a doctor command that could not run a host query.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -14,6 +18,9 @@ pub(crate) enum DoctorQueryError {
     /// A host command returned bytes that were not UTF-8.
     #[error("{program} output was not valid UTF-8: {message}")]
     InvalidOutput { program: String, message: String },
+    /// The persistent UFW rules could not be read.
+    #[error("could not read {path}: {message}")]
+    Read { path: String, message: String },
 }
 
 /// Provides the pinned PipeWire source enumeration query.
@@ -28,6 +35,10 @@ pub(crate) trait FirewallQueries {
     fn nft_ruleset(&self) -> Result<String, DoctorQueryError>;
     /// Returns the output of `iptables -L -n`.
     fn iptables_rules(&self) -> Result<String, DoctorQueryError>;
+    /// Returns the persistent UFW IPv4 rules, or an empty string when UFW is absent.
+    fn ufw_rules(&self) -> Result<String, DoctorQueryError> {
+        Ok(String::new())
+    }
 }
 
 /// Executes the pinned PipeWire query using the host's pactl command.
@@ -51,6 +62,15 @@ impl FirewallQueries for NativeFirewallQueries {
 
     fn iptables_rules(&self) -> Result<String, DoctorQueryError> {
         run_command("iptables", &["-L", "-n"])
+    }
+
+    fn ufw_rules(&self) -> Result<String, DoctorQueryError> {
+        fs::read_to_string(UFW_RULES_PATH)
+            .map(|rules| rules.trim().to_owned())
+            .map_err(|error| DoctorQueryError::Read {
+                path: UFW_RULES_PATH.to_owned(),
+                message: error.to_string(),
+            })
     }
 }
 
@@ -172,26 +192,43 @@ where
 fn firewall_item<F: FirewallQueries>(firewall: &F) -> DoctorItem {
     let nft = firewall.nft_ruleset();
     let iptables = firewall.iptables_rules();
+    let ufw = firewall.ufw_rules();
     let nft_match = nft
         .as_ref()
         .is_ok_and(|rules| rules.contains(FIREWALL_PORT));
     let iptables_match = iptables
         .as_ref()
         .is_ok_and(|rules| rules.contains(FIREWALL_PORT));
-    let passed = nft_match || iptables_match;
-    let backend = match (nft_match, iptables_match) {
-        (true, true) => "nftables and iptables",
-        (true, false) => "nftables",
-        (false, true) => "iptables",
-        (false, false) => "none",
+    let ufw_match = ufw.as_ref().is_ok_and(|rules| {
+        let has_allow = rules
+            .lines()
+            .map(str::trim)
+            .any(|rule| rule == UFW_ALLOW_RULE);
+        let has_deny = rules
+            .lines()
+            .map(str::trim)
+            .any(|rule| rule == UFW_DENY_RULE);
+        has_allow && has_deny
+    });
+    let passed = nft_match || iptables_match || ufw_match;
+    let backend = match (nft_match, iptables_match, ufw_match) {
+        (false, false, false) => "none",
+        (true, false, false) => "nftables",
+        (false, true, false) => "iptables",
+        (false, false, true) => "UFW",
+        (true, true, false) => "nftables and iptables",
+        (true, false, true) => "nftables and UFW",
+        (false, true, true) => "iptables and UFW",
+        (true, true, true) => "nftables, iptables, and UFW",
     };
     let detail = if passed {
         format!("UDP {FIREWALL_PORT} rule found via {backend}")
     } else {
         format!(
-            "UDP {FIREWALL_PORT} rule not found via {backend}; nft={}; iptables={}",
+            "UDP {FIREWALL_PORT} rule not found via {backend}; nft={}; iptables={}; UFW={}",
             query_detail(nft),
-            query_detail(iptables)
+            query_detail(iptables),
+            query_detail(ufw)
         )
     };
     DoctorItem {
@@ -282,6 +319,21 @@ mod tests {
         assert!(!report.items[2].passed);
     }
 
+    #[test]
+    fn reports_pass_when_ufw_restricts_the_port_to_the_windows_peer() {
+        // Given
+        let service = FakeService;
+        let capture = FakeCapture;
+        let firewall = UfwFirewall;
+
+        // When
+        let report = run_doctor(&service, &capture, &firewall, "v0.1.12");
+
+        // Then
+        assert!(report.all_passed());
+        assert!(report.items[2].detail.contains("UFW"));
+    }
+
     #[derive(Debug)]
     struct MissingFirewall;
 
@@ -298,6 +350,33 @@ mod tests {
                 program: "iptables".to_owned(),
                 message: "not installed".to_owned(),
             })
+        }
+    }
+
+    #[derive(Debug)]
+    struct UfwFirewall;
+
+    impl FirewallQueries for UfwFirewall {
+        fn nft_ruleset(&self) -> Result<String, DoctorQueryError> {
+            Err(DoctorQueryError::Invoke {
+                program: "nft".to_owned(),
+                message: "permission denied".to_owned(),
+            })
+        }
+
+        fn iptables_rules(&self) -> Result<String, DoctorQueryError> {
+            Err(DoctorQueryError::Invoke {
+                program: "iptables".to_owned(),
+                message: "permission denied".to_owned(),
+            })
+        }
+
+        fn ufw_rules(&self) -> Result<String, DoctorQueryError> {
+            Ok(
+                "-A ufw-user-input -p udp --dport 6902 -s 192.168.0.200 -j ACCEPT\n\
+                 -A ufw-user-input -p udp --dport 6902 -j DROP"
+                    .to_owned(),
+            )
         }
     }
 }
