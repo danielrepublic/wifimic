@@ -14,11 +14,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: cargo build --release --locked -p wifimic_client
+      - run: cargo build --release --locked -p wifimic_client --bin wifimic_client_updater
       - shell: pwsh
         run: |
           $stage = 'dist/windows'
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
           Copy-Item target/release/wifimic_client.exe "$stage/wifimic_client.exe"
+          Copy-Item target/release/wifimic_client_updater.exe "$stage/wifimic_client_updater.exe"
           Copy-Item deploy/windows/install-wifimic-client.ps1 "$stage/install-wifimic-client.ps1"
           Set-Content -Path "$stage/test.md" -Value 'fuck you!'
           Compress-Archive -Path "$stage/*" -DestinationPath dist/wifimic-windows-x86_64.zip
