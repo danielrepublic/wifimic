@@ -1,37 +1,25 @@
+use thiserror::Error;
 #[cfg(target_os = "windows")]
-use wifimic_client::{updater, updater_native::NativeUpdaterOperations};
+use wifimic_client::{
+    updater,
+    updater_native::{validate_no_arguments, NativeUpdaterOperations},
+};
 
-fn validate_no_arguments(args: &[String]) -> Result<(), String> {
-    if args.len() > 1 {
-        Err("wifimic_client_updater does not accept command-line arguments".to_owned())
-    } else {
-        Ok(())
-    }
-}
+const INVALID_ARGUMENTS_EXIT_CODE: i32 = 2;
+const UPDATE_FAILED_EXIT_CODE: i32 = 1;
 
-#[cfg(test)]
-mod tests {
-    use super::validate_no_arguments;
-
-    #[test]
-    fn rejects_any_cli_argument_before_any_side_effect() {
-        // Given
-        let args = vec!["wifimic_client_updater".to_owned(), "--tag".to_owned()];
-
-        // When
-        let result = validate_no_arguments(&args);
-
-        // Then
-        assert!(result.is_err());
-    }
+#[derive(Debug, Error, PartialEq, Eq)]
+enum UpdaterCliError {
+    #[error("wifimic_client_updater does not accept command-line arguments")]
+    UnexpectedArguments,
 }
 
 #[cfg(target_os = "windows")]
 fn main() {
     let args = std::env::args().collect::<Vec<_>>();
-    if let Err(error) = validate_no_arguments(&args) {
-        eprintln!("{error}");
-        std::process::exit(2);
+    if validate_no_arguments(&args).is_err() {
+        eprintln!("{}", UpdaterCliError::UnexpectedArguments);
+        std::process::exit(INVALID_ARGUMENTS_EXIT_CODE);
     }
 
     println!("檢查中...");
@@ -62,7 +50,7 @@ fn main() {
     };
     wait_for_keypress();
     if !succeeded {
-        std::process::exit(1);
+        std::process::exit(UPDATE_FAILED_EXIT_CODE);
     }
 }
 
@@ -80,5 +68,5 @@ fn wait_for_keypress() {
 #[cfg(not(target_os = "windows"))]
 fn main() {
     eprintln!("wifimic_client_updater is Windows-only");
-    std::process::exit(1);
+    std::process::exit(UPDATE_FAILED_EXIT_CODE);
 }

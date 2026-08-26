@@ -10,10 +10,36 @@ use crate::updater::{TaskSnapshot, UpdaterError, UpdaterOperations};
 
 const TASK_PATH: &str = r"\wifimic\wifimic-client";
 const CLIENT_INSTALL_PATH: &str = r"C:\Program Files\wifimic-client\wifimic_client.exe";
+const HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(250);
 
 /// Executes the installed Windows client's update operations.
 #[derive(Debug, Default)]
 pub struct NativeUpdaterOperations;
+
+/// Rejects every command-line argument beyond the process name.
+pub fn validate_no_arguments(args: &[String]) -> Result<(), &'static str> {
+    if args.len() > 1 {
+        Err("wifimic_client_updater does not accept command-line arguments")
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn rejects_any_cli_argument_before_any_side_effect() {
+    // Given
+    let args = vec!["wifimic_client_updater".to_owned(), "--tag".to_owned()];
+
+    // When
+    let result = validate_no_arguments(&args);
+
+    // Then
+    assert_eq!(
+        result,
+        Err("wifimic_client_updater does not accept command-line arguments")
+    );
+}
 
 impl UpdaterOperations for NativeUpdaterOperations {
     fn resolve_latest_tag(&mut self) -> Result<String, UpdaterError> {
@@ -35,9 +61,8 @@ impl UpdaterOperations for NativeUpdaterOperations {
     fn restore_executable(
         &mut self,
         backup_path: &Path,
-        _install_path: &Path,
+        install_path: &Path,
     ) -> Result<(), UpdaterError> {
-        let install_path = client_install_path();
         let temporary = sibling_path(install_path, ".wifimic_client.rollback");
         fs::copy(backup_path, &temporary).map_err(|error| UpdaterError::Restore {
             message: error.to_string(),
@@ -122,9 +147,8 @@ impl UpdaterOperations for NativeUpdaterOperations {
     fn atomic_swap_executable(
         &mut self,
         staged: &Path,
-        _install_path: &Path,
+        install_path: &Path,
     ) -> Result<(), UpdaterError> {
-        let install_path = client_install_path();
         let temporary = sibling_path(install_path, ".wifimic_client.upgrade");
         fs::copy(staged, &temporary).map_err(|error| UpdaterError::Swap {
             message: error.to_string(),
@@ -159,7 +183,7 @@ impl UpdaterOperations for NativeUpdaterOperations {
             if Instant::now() >= deadline {
                 return Ok(false);
             }
-            thread::sleep(Duration::from_millis(250));
+            thread::sleep(HEALTH_POLL_INTERVAL);
         }
     }
 }
