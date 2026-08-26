@@ -1,0 +1,31 @@
+# Todo 4 failure-path verification
+
+## Missing updater
+
+Staged `wifimic_client.exe` without its sibling `wifimic_client_updater.exe` and ran TestMode. The process exited non-zero before fake `EnsureDirectory` or `CopyFile` operations:
+
+```text
+wifimic-client installer failed: [MissingUpdater] Updater executable was not found: '<temp>\wifimic-task4-missing-stage-...\wifimic_client_updater.exe'.
+EXIT_CODE=1
+STATE_ROOT_EXISTS=False
+```
+
+## Rollback after executable/updater mutation
+
+Ran TestMode with both executables and `-FailurePoint AfterExecutableCopy`, then repeated with `-FailurePoint AfterTask` so the updater copy and rollback branch were exercised:
+
+```text
+FAILURE_POINT=AfterExecutableCopy
+wifimic-client installer failed: [SimulatedFailure] Simulated installer failure at 'AfterExecutableCopy'.
+EXIT_CODE=1
+ROLLBACK_FAILED_PRESENT=False
+STATE_ROOT_EXISTS_AFTER_FINALLY=False
+
+FAILURE_POINT=AfterTask
+wifimic-client installer failed: [SimulatedFailure] Simulated installer failure at 'AfterTask'.
+EXIT_CODE=1
+ROLLBACK_FAILED_PRESENT=False
+STATE_ROOT_EXISTS_AFTER_FINALLY=False
+```
+
+`AfterTask` completed rollback verification without `RollbackFailed`; the fake state root (including its mapped install root) was then removed by the script's cleanup path, leaving no updater orphan.
