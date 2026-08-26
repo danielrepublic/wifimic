@@ -35,3 +35,9 @@ _Auto-scaffolded by /start-work. Append new entries below - never overwrite._
 - Executable backup, rollback, and installation always target the sibling client at `C:\Program Files\wifimic-client\wifimic_client.exe`; installation and rollback copy to a same-volume sibling temporary path before `std::fs::rename`, so the updater never swaps its own executable.
 - `assets/updater-manifest.rc` is compiled only for `wifimic_client_updater` with `embed_resource::compile_for(...).manifest_required()`. The existing tray resource remains optional and applies to the unelevated client binaries; the updater's manifest alone requests `requireAdministrator`.
 - UAC cancellation is handled by Windows before `main()` and therefore has no application-level message or file/task mutation. The updater accepts no command-line arguments and waits for Enter after reporting its result.
+
+## Todo 4 — installer and release sibling artifact contract
+
+- `Get-WifimicIdentity` exposes `UpdaterExecutableName` (`wifimic_client_updater.exe`) and `UpdaterExecutablePath` (`C:\Program Files\wifimic-client\wifimic_client_updater.exe`) alongside the client executable identity fields.
+- `Invoke-WifimicInstall` requires `wifimic_client_updater.exe` beside the supplied `wifimic_client.exe` before any install-root or staging-directory mutation. If absent, it raises the exact installer error code `MissingUpdater` with message `Updater executable was not found: '<resolved sibling path>'.`
+- Updater transaction state uses `$priorUpdater` and `$updaterChanged`; the updater is captured before mutation, copied into the stage and then the canonical install path with the existing `CopyFile` operation, and rolled back through the existing `RemoveFile`/`RestoreFile` operations. Rollback verification captures `UpdaterExecutablePath` and raises `RollbackVerification` when the prior updater state is not restored exactly.
