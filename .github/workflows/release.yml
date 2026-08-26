@@ -19,7 +19,7 @@ jobs:
           $stage = 'dist/windows'
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
           Copy-Item target/release/wifimic_client.exe "$stage/wifimic_client.exe"
-          Copy-Item deploy/windows/install-wifimic-client.ps1 "$stage/install-wifimic-client.ps1"
+          Copy-Item target/release/wifimic_client_installer.exe "$stage/wifimic_client_installer.exe"
           Set-Content -Path "$stage/test.md" -Value 'fuck you!'
           Compress-Archive -Path "$stage/*" -DestinationPath dist/wifimic-windows-x86_64.zip
           $hash = (Get-FileHash dist/wifimic-windows-x86_64.zip -Algorithm SHA256).Hash.ToLowerInvariant()

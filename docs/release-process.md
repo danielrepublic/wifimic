@@ -24,7 +24,7 @@
    ```
    確認 6 個成品皆已上傳：`install-wifimic-windows.ps1`、`wifimic-windows-x86_64.zip`（含 `.sha256`）、`install-wifimic-linux.sh`、`wifimic-linux-x86_64.tar.gz`（含 `.sha256`）。
 4. **實際部署（不得省略，即使本版只改了一端）**：
-   - **Windows 端**（真實用戶端機器 `192.168.0.200`）：執行 `deploy/windows/update-wifimic-client.ps1 -Tag vX.Y.Z -AcceptHostMutation`（尚未安裝過則改用 `install-wifimic-client.ps1`，或 README 的一鍵安裝指令），並依 `docs/deployment.md` 第 7.6 節驗證。
+   - **Windows 端**（真實用戶端機器 `192.168.0.200`）：在系統管理員互動式工作階段執行 `wifimic_client.exe upgrade --tag vX.Y.Z`（尚未安裝過則使用 README 的一鍵安裝指令；其底層會呼叫 `wifimic_client_installer.exe install`），並依 `docs/deployment.md` 第 7.6 節驗證。
    - **Linux 端**（真實伺服器 `192.168.0.210`）：執行 `WIFIMIC_CONTROL_SMOKE_HELPER=<path> deploy/linux/update-wifimic-server.sh vX.Y.Z`，並依 `docs/deployment.md` 第 6.5 節驗證。
 5. **端到端人工驗證**（`docs/deployment.md` 第 8.3 節）：
    - Linux 端 `journalctl --user -u wifimic-server -f` 觀察 `parec` 讀取與 UDP 發送、控制平面 Start/Heartbeat Ack。
@@ -63,5 +63,5 @@ v0.1.0–v0.1.7 皆已手動驗證過完整部署流程；本文件將其列為�
 - `docs/deployment.md` — 完整安裝／更新／驗證步驟（本文件第 4、5 步引用其章節）
 - `docs/deployment-linux.md` — Linux 伺服器詳細部署指南
 - `.github/workflows/release.yml` — 標籤觸發的自動建置與發布流程
-- `deploy/windows/update-wifimic-client.ps1` — Windows 用戶端更新腳本
+- `apps/wifimic_client/src/bin/wifimic_client_installer.rs` — Windows 用戶端安裝器命令列入口
 - `deploy/linux/update-wifimic-server.sh` — Linux 伺服器更新腳本

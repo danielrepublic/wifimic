@@ -5,6 +5,8 @@ pub mod jitter;
 pub mod logging;
 pub mod render;
 
+#[cfg(target_os = "windows")]
+mod client_update;
 mod latency_diagnostic;
 mod tray;
 use latency_diagnostic::run_latency_diagnostic;
@@ -28,6 +30,43 @@ enum CalibrationCliError {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (_diagnostics, _startup_rotation) = logging::initialize_diagnostics()?;
+    let arguments = std::env::args().collect::<Vec<_>>();
+    if arguments
+        .iter()
+        .any(|argument| argument == "-v" || argument == "--version")
+    {
+        println!("{}", env!("WIFIMIC_CLIENT_VERSION"));
+        return Ok(());
+    }
+    if arguments
+        .get(1)
+        .is_some_and(|argument| argument == "check-update")
+    {
+        #[cfg(target_os = "windows")]
+        {
+            let result = client_update::check_update();
+            println!("{}", client_update::render_check(&result));
+            if result.is_err() {
+                std::process::exit(1);
+            }
+        }
+        #[cfg(not(target_os = "windows"))]
+        println!("更新檢查失敗：Windows client only");
+        return Ok(());
+    }
+    if arguments
+        .get(1)
+        .is_some_and(|argument| argument == "upgrade")
+    {
+        #[cfg(target_os = "windows")]
+        {
+            let tag = parse_upgrade_tag(&arguments)?;
+            println!("{}", client_update::upgrade(tag)?);
+        }
+        #[cfg(not(target_os = "windows"))]
+        println!("更新失敗：Windows client only");
+        return Ok(());
+    }
     if std::env::args().any(|argument| argument == "--calibrate") {
         run_calibration()?;
         return Ok(());
@@ -39,6 +78,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(target_os = "windows")]
     run_windows_client()?;
     Ok(())
+}
+
+#[cfg(target_os = "windows")]
+fn parse_upgrade_tag(arguments: &[String]) -> Result<Option<&str>, &'static str> {
+    let mut values = arguments.iter().skip(2);
+    match values.next() {
+        None => Ok(None),
+        Some(flag) if flag == "--tag" => match values.next() {
+            Some(tag) if !tag.starts_with('-') && values.next().is_none() => Ok(Some(tag)),
+            _ => Err("upgrade --tag requires a vMAJOR.MINOR.PATCH value"),
+        },
+        Some(_) => Err("upgrade only accepts optional --tag vX.Y.Z"),
+    }
 }
 
 const CALIBRATION_PROBE_COUNT: u32 = 4;
@@ -191,6 +243,10 @@ fn run_windows_client() -> Result<(), Box<dyn std::error::Error>> {
         let now = Instant::now();
         tray::pump_windows_messages();
         if let Some(event) = tray.poll_menu_event() {
+            if event.is_check_for_updates() {
+                client_update::handle_tray_update();
+                continue;
+            }
             let dispatch =
                 tray::dispatch_menu_event(&mut control, event, now, epoch_ms()?, &mut run_state)?;
             if dispatch == TrayDispatch::ExitRequested {

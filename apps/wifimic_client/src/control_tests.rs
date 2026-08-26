@@ -365,7 +365,10 @@ fn control_next_wakeup_tracks_the_start_deadline_while_establishing() {
     let _ = client.start(origin, 90_000).expect("Start must send");
 
     // Then
-    assert_eq!(client.next_wakeup(), Some(origin + super::START_ACK_TIMEOUT));
+    assert_eq!(
+        client.next_wakeup(),
+        Some(origin + super::START_ACK_TIMEOUT)
+    );
 }
 
 #[test]

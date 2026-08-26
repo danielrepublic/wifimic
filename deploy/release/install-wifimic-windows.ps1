@@ -40,19 +40,17 @@ try {
     $stagePath = Join-Path $temporaryRoot 'stage'
     Expand-Archive -LiteralPath $archivePath -DestinationPath $stagePath -Force
     $client = Join-Path $stagePath 'wifimic_client.exe'
-    $installer = Join-Path $stagePath 'install-wifimic-client.ps1'
+    $installer = Join-Path $stagePath 'wifimic_client_installer.exe'
     if (-not (Test-Path -LiteralPath $client -PathType Leaf) -or -not (Test-Path -LiteralPath $installer -PathType Leaf)) {
         throw 'The verified archive is missing the Windows client or installer.'
     }
 
-    $arguments = @{ ClientExecutable = $client }
-    if ($TestMode) {
-        $arguments.TestMode = $true
+    & "$stagePath\wifimic_client_installer.exe" install --client-executable $client --render-endpoint "CABLE Input (VB-Audio Virtual Cable)" --accept-host-mutation
+    if ($LASTEXITCODE -ne 0) {
+        $installerExitCode = $LASTEXITCODE
+        [Console]::Error.WriteLine("wifimic_client_installer.exe failed with exit code $installerExitCode.")
+        exit $installerExitCode
     }
-    else {
-        $arguments.AcceptHostMutation = $true
-    }
-    & $installer @arguments
 }
 finally {
     if (Test-Path -LiteralPath $temporaryRoot) {

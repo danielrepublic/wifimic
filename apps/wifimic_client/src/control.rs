@@ -325,7 +325,10 @@ where
             .jitter
             .next_playout_ms()
             .map(|elapsed_ms| self.origin + Duration::from_millis(elapsed_ms));
-        [state_deadline, playout_deadline].into_iter().flatten().min()
+        [state_deadline, playout_deadline]
+            .into_iter()
+            .flatten()
+            .min()
     }
 
     /// Returns the current lifecycle state.
