@@ -497,8 +497,6 @@ C:\Program Files\wifimic-client\wifimic_client_updater.exe
 - **核准**：程式以系統管理員權限繼續執行更新流程。
 - **拒絕**：Windows 會取消該程式——UAC 拒絕發生在 `main()` 函式之前，因此**不會有任何應用程式層級的訊息、不會修改任何檔案、不會變更任何排程工作狀態**。使用者僅看到 Windows 原生的取消對話框，程式直接結束。
 
-> 此行為取代了先前 PowerShell 更新腳本的 `-TestMode` / `-FailurePoint` 參數測試機制；更新程式無測試模式。
-
 ### 7.4 更新流程內部步驟（供審計參考）
 
 1. 驗證無命令列參數（有則退出碼 2）
