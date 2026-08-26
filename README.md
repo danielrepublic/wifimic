@@ -24,7 +24,7 @@ Run:
 curl -fsSL https://github.com/danielrepublic/wifimic/releases/latest/download/install-wifimic-linux.sh | bash
 ```
 
-The installer verifies the Linux archive SHA-256, installs the user service, enables linger, and prompts for `sudo` only to install the peer-scoped firewall rule.
+The installer verifies the Linux archive SHA-256, installs the user service, enables linger, and creates the `wifimic_server` command in `/usr/local/bin`. It prompts for `sudo` to install the command entry and the peer-scoped firewall rule.
 
 To install a specific release rather than the latest, download the release installer and pass its tag as the first argument.
 

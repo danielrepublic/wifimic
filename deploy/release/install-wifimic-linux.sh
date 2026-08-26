@@ -4,6 +4,8 @@ set -Eeuo pipefail
 readonly REPOSITORY='danielrepublic/wifimic'
 readonly ASSET_NAME='wifimic-linux-x86_64.tar.gz'
 readonly SERVICE_NAME='wifimic-server'
+readonly SERVER_BINARY_PATH="$HOME/.local/bin/wifimic_server"
+readonly COMMAND_PATH='/usr/local/bin/wifimic_server'
 
 tag="${1:-}"
 release_segment='latest/download'
@@ -59,7 +61,15 @@ for required_file in "$server_binary" "$unit_file" "$firewall_script"; do
     }
 done
 
-install -Dm755 "$server_binary" "$HOME/.local/bin/wifimic_server"
+install -Dm755 "$server_binary" "$SERVER_BINARY_PATH"
+if [[ -e "$COMMAND_PATH" || -L "$COMMAND_PATH" ]]; then
+    [[ -L "$COMMAND_PATH" && "$(readlink -- "$COMMAND_PATH")" == "$SERVER_BINARY_PATH" ]] || {
+        printf 'wifimic install failed: command path is owned by another installation: %s\n' "$COMMAND_PATH" >&2
+        exit 1
+    }
+fi
+sudo install -d -m 755 "$(dirname -- "$COMMAND_PATH")"
+sudo ln -sfn "$SERVER_BINARY_PATH" "$COMMAND_PATH"
 install -Dm644 "$unit_file" "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/wifimic-server.service"
 marker_file="$stage_path/test.md"
 if [[ -f "$marker_file" ]]; then
@@ -70,4 +80,4 @@ systemctl --user daemon-reload
 systemctl --user enable --now "$SERVICE_NAME"
 sudo bash "$firewall_script"
 systemctl --user is-active --quiet "$SERVICE_NAME"
-printf 'wifimic Linux server installed from %s.\n' "${tag:-the latest GitHub release}"
+printf 'wifimic Linux server installed from %s. Run wifimic_server upgrade to update.\n' "${tag:-the latest GitHub release}"

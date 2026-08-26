@@ -39,6 +39,9 @@ cargo build --release --bin wifimic_server
 # 安裝至使用者本地 bin 目錄（systemd 單元參照此路徑）
 mkdir -p ~/.local/bin
 cp target/release/wifimic_server ~/.local/bin/
+
+# 建立供互動式 shell 使用的命令入口
+sudo ln -sfn "$HOME/.local/bin/wifimic_server" /usr/local/bin/wifimic_server
 ```
 
 驗證二進位檔：
@@ -46,6 +49,8 @@ cp target/release/wifimic_server ~/.local/bin/
 ```bash
 file ~/.local/bin/wifimic_server
 # 輸出應包含 ELF 64-bit LSB executable, x86-64
+command -v wifimic_server
+# 應輸出 /usr/local/bin/wifimic_server
 ```
 
 ---
