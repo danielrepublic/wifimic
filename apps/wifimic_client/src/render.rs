@@ -96,11 +96,8 @@ fn apply_gain(sample: &[u8]) -> [u8; BYTES_PER_SAMPLE] {
     let original = i16::from_le_bytes([sample[0], sample[1]]);
     let boosted = i32::from(original).saturating_mul(RENDER_GAIN_MULTIPLIER);
     let clamped = boosted.clamp(i32::from(i16::MIN), i32::from(i16::MAX));
-    let gained = i16::try_from(clamped).unwrap_or(if clamped.is_positive() {
-        i16::MAX
-    } else {
-        i16::MIN
-    });
+    let gained =
+        i16::try_from(clamped).unwrap_or(if clamped.is_positive() { i16::MAX } else { i16::MIN });
     gained.to_le_bytes()
 }
 

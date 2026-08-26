@@ -14,17 +14,7 @@ Open an Administrator PowerShell in an interactive session, then run:
 irm https://github.com/danielrepublic/wifimic/releases/latest/download/install-wifimic-windows.ps1 | iex
 ```
 
-The bootstrap verifies the release zip SHA-256, then invokes the bundled compiled installer to install `wifimic_client.exe` to `C:\Program Files\wifimic-client`, register the interactive logon task, and scope the UDP 6902 firewall rule to the Linux peer.
-
-#### Manual updates
-
-An already-installed client can check for and apply updates without re-running the install one-liner:
-
-- `wifimic_client check-update` — queries GitHub for a newer release (reports only, does not install)
-- `wifimic_client upgrade [--tag vX.Y.Z]` — downloads, verifies, and installs a release with automatic rollback on failure
-- The tray `檢查更新…` (“Check for Updates…”) item — prompts for confirmation, then starts the update with UAC elevation
-
-These are manual, one-shot update paths; users do not need to invoke the bundled installer directly.
+The installer verifies the release zip SHA-256, installs `wifimic_client.exe` to `C:\Program Files\wifimic-client`, registers the interactive logon task, and scopes the UDP 6902 firewall rule to the Linux peer.
 
 ### Linux server
 

@@ -15,21 +15,21 @@
 | UDP 埠號 | `6902` | `apps/wifimic_server/src/network.rs:5`、`deploy/linux/wifimic-server-firewall.sh:5` |
 | 固定 PipeWire 捕獲源 | `alsa_input.pci-0000_00_1b.0.analog-stereo` | `apps/wifimic_server/src/capture_types.rs:6` |
 | `parec` 參數 | `--raw --format=s16le --rate=48000 --channels=1 --latency-msec=5 --process-time-msec=5 --device=alsa_input.pci-0000_00_1b.0.analog-stereo` | `apps/wifimic_server/src/capture_types.rs:9-17` |
-| Windows 安裝根目錄 | `C:\Program Files\wifimic-client` | `apps/wifimic_client/src/installer.rs:12` |
-| Windows 執行檔名稱 | `wifimic_client.exe` | `apps/wifimic_client/src/installer.rs:14` |
-| Windows 排程工作資料夾 | `\wifimic\` | `apps/wifimic_client/src/installer.rs:16` |
-| Windows 排程工作名稱 | `wifimic-client` | `apps/wifimic_client/src/installer.rs:16` |
-| Windows 排程工作完整路徑 | `\wifimic\wifimic-client` | `apps/wifimic_client/src/installer.rs:16` |
-| Windows 防火牆顯示名稱 | `wifimic-client` | `apps/wifimic_client/src/installer.rs:18` |
-| Windows 防火牆遠端位址 | `192.168.0.210/32` | `apps/wifimic_client/src/installer.rs:20` |
-| Windows 防火牆通訊埠 | `6902` (UDP) | `apps/wifimic_client/src/installer.rs:22` |
-| Windows 固定渲染端點 | `CABLE Input (VB-Audio Virtual Cable)` | `apps/wifimic_client/src/installer.rs:24` |
+| Windows 安裝根目錄 | `C:\Program Files\wifimic-client` | `deploy/windows/install-wifimic-client.ps1:18` |
+| Windows 執行檔名稱 | `wifimic_client.exe` | `deploy/windows/install-wifimic-client.ps1:19` |
+| Windows 排程工作資料夾 | `\wifimic\` | `deploy/windows/install-wifimic-client.ps1:20` |
+| Windows 排程工作名稱 | `wifimic-client` | `deploy/windows/install-wifimic-client.ps1:21` |
+| Windows 排程工作完整路徑 | `\wifimic\wifimic-client` | `deploy/windows/install-wifimic-client.ps1:22` |
+| Windows 防火牆顯示名稱 | `wifimic-client` | `deploy/windows/install-wifimic-client.ps1:23` |
+| Windows 防火牆遠端位址 | `192.168.0.210/32` | `deploy/windows/install-wifimic-client.ps1:24` |
+| Windows 防火牆通訊埠 | `6902` (UDP) | `deploy/windows/install-wifimic-client.ps1:25` |
+| Windows 固定渲染端點 | `CABLE Input (VB-Audio Virtual Cable)` | `deploy/windows/install-wifimic-client.ps1:26` |
 | Linux 服務名稱 | `wifimic-server` | `deploy/systemd/wifimic-server.service` |
 | Linux 二進位檔路徑 | `~/.local/bin/wifimic_server` | systemd 單元 `ExecStart` |
 | Linux systemd 使用者單元路徑 | `~/.config/systemd/user/wifimic-server.service` | `deploy/linux/update-wifimic-server.sh:7` |
 | Linux 更新腳本 | `deploy/linux/update-wifimic-server.sh` | — |
-| Windows 安裝器 | `wifimic_client_installer.exe install` | `apps/wifimic_client/src/bin/wifimic_client_installer.rs` |
-| Windows 更新機制 | `wifimic_client.exe upgrade` | `apps/wifimic_client/src/client_update.rs` |
+| Windows 安裝腳本 | `deploy/windows/install-wifimic-client.ps1` | — |
+| Windows 更新腳本 | `deploy/windows/update-wifimic-client.ps1` | — |
 
 ---
 
@@ -263,7 +263,13 @@ iptables -v -n -L INPUT | grep 6902
 
 ## 5. Windows 用戶端安裝（首次）
 
-Windows 首次安裝由公開 bootstrap 腳本下載並驗證 release zip，再直接呼叫編譯後的 `wifimic_client_installer.exe`。終端使用者通常不需要直接呼叫安裝器；以下命令說明其底層機制。
+安裝腳本 `deploy/windows/install-wifimic-client.ps1` 為冪等、可回滾、支援三種模式：
+
+| 模式 | 參數 | 行為 |
+|------|------|------|
+| **DryRun** | `-DryRun` | 僅驗證端點存在、路徑可寫、防火牆規則簽章符合，**不寫入任何系統狀態** |
+| **TestMode** | `-TestMode` | 在隔離暫存目錄下模擬完整安裝流程（任務、防火牆、檔案複製），**不觸碰真實系統**，輸出 JSON 含 `FakeEvents` 事件流 |
+| **Native** | （預設，需 `-AcceptHostMutation`） | 真實寫入 `C:\Program Files\wifimic-client`、註冊排程工作、建立防火牆規則，**需系統管理員互動式工作階段** |
 
 ### 5.1 先決條件檢查（僅讀）
 
@@ -271,43 +277,83 @@ Windows 首次安裝由公開 bootstrap 腳本下載並驗證 release zip，再�
 # 確認 VB-CABLE Input 端點存在
 Get-PnpDevice -Class AudioEndpoint -Status OK | Where-Object { $_.FriendlyName -eq 'CABLE Input (VB-Audio Virtual Cable)' }
 
-# 確認 release 成品存在
+# 確認建置產物存在
 ls C:\src\wifimic\target\release\wifimic_client.exe
-ls C:\src\wifimic\target\release\wifimic_client_installer.exe
 ```
 
-### 5.2 公開 bootstrap 安裝（建議）
-
-```powershell
-irm https://github.com/danielrepublic/wifimic/releases/latest/download/install-wifimic-windows.ps1 | iex
-```
-
-bootstrap 會下載 `wifimic-windows-x86_64.zip` 與其 `.sha256` manifest，驗證 archive 的 SHA-256，解壓出 `wifimic_client.exe` 與 `wifimic_client_installer.exe`，再以底下 5.3 的 `install` 命令完成主機變更。它必須在系統管理員互動式工作階段中執行。
-
-### 5.3 原生安裝器呼叫（底層機制）
+### 5.2 DryRun 驗證（強烈建議先執行）
 
 ```powershell
 cd C:\src\wifimic
-$client = 'C:\src\wifimic\target\release\wifimic_client.exe'
-$installer = 'C:\src\wifimic\target\release\wifimic_client_installer.exe'
-& $installer install --client-executable $client --render-endpoint 'CABLE Input (VB-Audio Virtual Cable)' --accept-host-mutation
+.\deploy\windows\install-wifimic-client.ps1 `
+    -ClientExecutable 'C:\src\wifimic\target\release\wifimic_client.exe' `
+    -RenderEndpoint 'CABLE Input (VB-Audio Virtual Cable)' `
+    -DryRun
 ```
 
-`--accept-host-mutation` 是明確授權主機變更的必要旗標；安裝器也會自行檢查系統管理員權限與互動式工作階段。一般使用者應使用 5.2 的 bootstrap，而不是直接執行此底層命令。
+預期輸出（JSON）：
 
-### 5.4 原生安裝流程與回滾
+```json
+{
+  "Status": "Validated",
+  "Mode": "DryRun",
+  "InstallRoot": "C:\\Program Files\\wifimic-client",
+  "TaskPath": "\\wifimic\\wifimic-client",
+  "FirewallDisplayName": "wifimic-client",
+  "RemoteAddress": "192.168.0.210/32",
+  "Protocol": "UDP",
+  "Port": "6902",
+  "Endpoint": "CABLE Input (VB-Audio Virtual Cable)",
+  "LogonTrigger": "LogonTrigger",
+  "LogonType": "InteractiveToken"
+}
+```
 
-安裝器在寫入前先捕獲既有排程工作、防火牆規則與用戶端執行檔，接著依序：
+> **關鍵檢查點**：`Endpoint` 必須完全等於 `CABLE Input (VB-Audio Virtual Cable)`，大小寫、空格皆需一致；若列舉不到該端點，安裝會以 `EndpointNotFound` 失敗。
 
-1. 將候選 `wifimic_client.exe` 複製到私有暫存位置並確認檔案非空
-2. 原子替換安裝根目錄中的執行檔
-3. 註冊 canonical `InteractiveToken` 登入觸發排程工作
-4. 建立 canonical UDP 6902 防火牆規則，僅允許 `192.168.0.210/32`
-5. 啟用並啟動排程工作，等待排程工作與 `CABLE Input (VB-Audio Virtual Cable)` 健康
+### 5.3 TestMode 隔離測試（可選）
 
-任何寫入後步驟失敗，安裝器會回復已捕獲的排程工作、防火牆規則與執行檔；原先不存在的項目則移除。若回復本身失敗，會以不同的失敗結果回報，而不是假定安裝成功。
+```powershell
+.\deploy\windows\install-wifimic-client.ps1 `
+    -ClientExecutable 'C:\src\wifimic\target\release\wifimic_client.exe' `
+    -RenderEndpoint 'CABLE Input (VB-Audio Virtual Cable)' `
+    -TestMode
+```
 
-安裝器結束碼為：`0` 成功、`10` 主機變更被拒絕（包含權限/工作階段或未明確接受）、`11` 命令列參數或端點不合法、`20` 主機變更失敗、`21` 回復失敗。
+輸出 JSON 含 `FakeEvents` 陣列，可檢查 `SetTask`、`SetFirewall`、`CopyFile` 等操作順序；暫存目錄於結束時自動清理。
+
+### 5.4 原生安裝（需授權）
+
+> **前置條件**：以**系統管理員身分**開啟 PowerShell，且為**互動式工作階段**（非遠端、非排程、非服務帳號）。
+
+```powershell
+cd C:\src\wifimic
+.\deploy\windows\install-wifimic-client.ps1 `
+    -ClientExecutable 'C:\src\wifimic\target\release\wifimic_client.exe' `
+    -RenderEndpoint 'CABLE Input (VB-Audio Virtual Cable)' `
+    -AcceptHostMutation
+```
+
+成功輸出（JSON）：
+
+```json
+{
+  "Status": "Installed",
+  "Mode": "Native",
+  "InstallRoot": "C:\\Program Files\\wifimic-client",
+  "ExecutablePath": "C:\\Program Files\\wifimic-client\\wifimic_client.exe",
+  "TaskFolder": "\\wifimic\\",
+  "TaskName": "wifimic-client",
+  "TaskPath": "\\wifimic\\wifimic-client",
+  "FirewallDisplayName": "wifimic-client",
+  "RemoteAddress": "192.168.0.210/32",
+  "Protocol": "UDP",
+  "Port": "6902",
+  "Endpoint": "CABLE Input (VB-Audio Virtual Cable)",
+  "LogonTrigger": "LogonTrigger",
+  "LogonType": "InteractiveToken"
+}
+```
 
 ### 5.5 安裝後驗證
 
@@ -326,7 +372,7 @@ Get-NetFirewallRule -DisplayName 'wifimic-client' | Get-NetFirewallAddressFilter
 Get-PnpDevice -Class AudioEndpoint -Status OK | Where-Object { $_.FriendlyName -eq 'CABLE Input (VB-Audio Virtual Cable)' }
 ```
 
-> **注意**：編譯後安裝器會在任何寫入後失敗時自動回滾，並在回復失敗時以退出碼 `21` 明確回報；它不是背景服務，也不會在沒有 `--accept-host-mutation` 時寫入主機狀態。
+> **注意**：安裝腳本會在失敗時自動回滾（移除新建任務、防火牆規則、複製的執行檔、暫存目錄），並驗證先前狀態完全還原。若安裝前已存在同名任務/規則但簽章不符，腳本會拒絕安裝並報 `ConflictingTask`/`ConflictingFirewall`。
 
 ---
 
@@ -417,59 +463,69 @@ journalctl --user -u wifimic-server -f
 
 ## 7. Windows 用戶端更新
 
-Windows 更新的主要入口是已安裝的 `wifimic_client.exe`：使用者可用命令列檢查/更新，或從系統匣執行「檢查更新…」。這些入口會在內部下載 release、暫存兩個 Windows 執行檔，並提升執行 `wifimic_client_installer.exe upgrade ...`；終端使用者不需要直接呼叫底層安裝器。
+更新腳本 `deploy/windows/update-wifimic-client.ps1` 採用**單一明確標籤/提交**、**乾淨工作區**、**先抓取再解析**、**git worktree 隔離建置**、**停用任務→原子替換→還原任務→啟動任務→健康檢查**、**自動回滾**機制。
 
 ### 7.1 先決條件
 
+- 來源倉庫為乾淨狀態（`git status --porcelain --untracked-files=all` 為空）
 - 規範排程工作 `\wifimic\wifimic-client` **存在且啟用**，狀態為 `Ready` 或 `Running`
 - 已安裝執行檔 `C:\Program Files\wifimic-client\wifimic_client.exe` 存在
 - `CABLE Input (VB-Audio Virtual Cable)` 端點可列舉
-- 可連線至 GitHub release，且 release zip 同時包含 `wifimic_client.exe` 與 `wifimic_client_installer.exe`
-- 更新需在**系統管理員互動式工作階段**中執行
+- 原生模式需：**系統管理員互動式工作階段** + `-AcceptHostMutation`
 
 ### 7.2 執行更新
 
 ```powershell
-# 只檢查，不安裝
-& 'C:\Program Files\wifimic-client\wifimic_client.exe' check-update
-
-# 更新至最新版本
-& 'C:\Program Files\wifimic-client\wifimic_client.exe' upgrade
-
-# 更新至指定 release tag
-& 'C:\Program Files\wifimic-client\wifimic_client.exe' upgrade --tag v1.2.3
+cd C:\src\wifimic
+.\deploy\windows\update-wifimic-client.ps1 -Tag v1.2.3 -AcceptHostMutation
 ```
 
-`check-update` 僅查詢並回報版本，不變更主機；`upgrade` 會下載、驗證並套用更新。不要重新執行首次安裝 one-liner，也不要由使用者直接呼叫底層 `wifimic_client_installer.exe upgrade`。
+或指定提交雜湊：
 
-### 7.3 系統匣更新（使用者確認）
+```powershell
+.\deploy\windows\update-wifimic-client.ps1 -Tag a1b2c3d4e5f6 -AcceptHostMutation
+```
 
-在系統匣選取「檢查更新…」後，用戶端會先查詢最新 release：
+### 7.3 測試模式（隔離驗證）
 
-1. 若有新版本，顯示確認對話框
-2. 使用者確認後，呼叫更新流程並由 Windows UAC 提升執行 bundled installer
-3. 若已是最新版本，顯示資訊對話框，不進行主機變更
+```powershell
+.\deploy\windows\update-wifimic-client.ps1 -Tag v1.2.3 -TestMode
+```
 
-取消確認不會啟動更新。
+輸出 JSON 含 `FakeEvents`、`PriorExecutableRestored`（回滾驗證）、`TaskXmlPreserved` 等欄位；暫存目錄自動清理。
+
+> **FailurePoint 測試**：`-FailurePoint` 參數可注入確定性失敗點（`DirtyCheckout`、`BadRevision`、`AmbiguousRevision`、`Fetch`、`Worktree`、`Build`、`Endpoint`、`DisableTask`、`StopTask`、`BeforeAtomicSwap`、`AtomicSwap`、`AfterAtomicSwap`、`SetTask`、`TaskRegistration`、`StartTask`、`Health`），僅限 `-TestMode` 使用。
 
 ### 7.4 更新流程內部步驟（供審計參考）
 
-1. `upgrade` 無 `--tag` 時發現最新 release；指定 `--tag vX.Y.Z` 時驗證 release tag
-2. 下載 `wifimic-windows-x86_64.zip` 與 `wifimic-windows-x86_64.zip.sha256`，以 SHA-256 manifest 驗證 archive
-3. 在暫存目錄解壓出**兩個**成品：`wifimic_client.exe` 與 `wifimic_client_installer.exe`
-4. 以 UAC 提升 bundled installer，執行 `upgrade --client-executable <staged wifimic_client.exe> --accept-host-mutation`
-5. installer 先檢查系統管理員權限與互動式工作階段，捕獲既有排程工作、防火牆規則與執行檔
-6. 停用並停止排程工作，原子替換用戶端執行檔，還原既有排程工作 XML，啟用並啟動排程工作
-7. 等待排程工作與 `CABLE Input (VB-Audio Virtual Cable)` 健康，最長等待 45 秒；完成後清理暫存目錄
+1. 驗證修訂文字格式（非空、無前後空白、非選項開頭、無空白/NUL、無 Git 複合語法）
+2. `GetSourceStatus`：檢查工作區乾淨度
+3. `FetchTags`：`git fetch --tags --prune origin`
+4. `ResolveRevision`：`git rev-parse --verify --end-of-options <tag>^{commit}` → 單一 40 字元 SHA
+5. 捕獲先前任務 XML、啟用狀態、執行檔位元組/SHA256
+6. 前置檢查：任務啟用、狀態可用、執行檔存在、端點可列舉
+7. 建立暫存目錄（`.wifimic-client-stage-<guid>`）、交易目錄（`.wifimic-client-transaction-<guid>`）
+8. `git worktree add --detach` 至暫存目錄
+9. `cargo build --release --locked -p wifimic_client` 在 worktree 內建置
+10. 捕獲候選執行檔 SHA256，驗證非空
+11. 再次前置檢查（建置期間未被竄改）
+12. 寫入交易位元組（先前執行檔備份）
+13. **任務變更開始**：停用任務 → 若 Running 則停止任務並等待非 Running
+14. **二進位變更開始**：同磁碟區原子替換（`File.Replace` / `File.Move`）
+15. 還原任務 XML（先前版本）、啟用任務、啟動任務
+16. 健康檢查輪詢：任務啟用、狀態 Ready/Running、端點可列舉（若先前 Running 則需 Running）
+17. 成功：輸出新/舊 SHA256、修訂、任務狀態；失敗：自動回滾
 
 ### 7.5 自動回滾行為
 
-若任務或執行檔變更已開始且後續步驟失敗：
+若任務/二進位變更已開始且後續步驟失敗：
 
-1. 還原先前執行檔位元組
-2. 還原先前排程工作與防火牆狀態；原子更新尚未成功建立的項目則移除
-3. 清理更新暫存目錄
-4. 回復失敗時，installer 以退出碼 `21` 回報；更新入口會將此結果顯示為更新與回復皆失敗
+1. 停止目前任務（若 Running 先 Stop 並等待）
+2. 原子還原先前執行檔位元組
+3. 還原先前任務 XML、啟用任務、若先前 Running 則啟動
+4. 驗證：執行檔 SHA256 還原、任務 XML 完全一致、啟用狀態、狀態 Ready/Running、若先前 Running 則為 Running
+5. 清理 worktree、暫存、交易目錄
+6. 輸出 `RollbackFailed` 或成功回滾訊息
 
 ### 7.6 更新後驗證
 
@@ -477,8 +533,10 @@ Windows 更新的主要入口是已安裝的 `wifimic_client.exe`：使用者可
 # 1. 排程工作存在、啟用、狀態 Ready/Running
 Get-ScheduledTask -TaskPath '\wifimic\' -TaskName 'wifimic-client' | Select-Object TaskPath, TaskName, State, Settings
 
-# 2. 執行檔存在且回報版本
-& 'C:\Program Files\wifimic-client\wifimic_client.exe' --version
+# 2. 執行檔 SHA256 已變更
+$bytes = [System.IO.File]::ReadAllBytes('C:\Program Files\wifimic-client\wifimic_client.exe')
+$sha = [System.Security.Cryptography.SHA256]::Create()
+[BitConverter]::ToString($sha.ComputeHash($bytes)).Replace('-', '').ToLowerInvariant()
 
 # 3. 端點仍可列舉
 Get-PnpDevice -Class AudioEndpoint -Status OK | Where-Object { $_.FriendlyName -eq 'CABLE Input (VB-Audio Virtual Cable)' }
@@ -546,15 +604,14 @@ Get-PnpDevice -Class AudioEndpoint -Status OK | Where-Object { $_.FriendlyName -
 
 | 現象 | 可能原因 | 排查步驟 |
 |------|----------|----------|
-| 安裝/更新健康檢查失敗 | VB-CABLE 未安裝、端點名稱不符、音訊服務未啟動，或排程工作未恢復健康 | 1. `Get-PnpDevice -Class AudioEndpoint -Status OK` 確認 `CABLE Input (VB-Audio Virtual Cable)` 存在<br>2. `Get-ScheduledTask -TaskPath '\wifimic\' -TaskName 'wifimic-client'` 檢查狀態<br>3. 確認 `C:\Program Files\wifimic-client\wifimic_client.exe` 存在 |
-| 安裝器退出碼 `10` | 未在系統管理員互動式工作階段執行，或未提供 `--accept-host-mutation` | 以「系統管理員身分執行」開啟 PowerShell，且確認不是服務、排程或其他非互動式工作階段；底層命令需帶 `--accept-host-mutation` |
-| 安裝器退出碼 `11` | 安裝器命令列參數或固定渲染端點不合法 | 依 5.3 的固定 grammar 執行，並確認端點完全等於 `CABLE Input (VB-Audio Virtual Cable)` |
-| 安裝器退出碼 `20` | 主機變更期間的操作失敗 | 保留安裝器 stderr 訊息，確認排程工作、`C:\Program Files\wifimic-client` 權限與端點狀態後重試；安裝器會先嘗試自動回復 |
-| 安裝器退出碼 `21` | 自動回復也失敗 | 不要重複執行更新；先人工檢查排程工作、執行檔與防火牆狀態，再依 7.6 驗證 |
+| 安裝/更新報 `EndpointNotFound` | VB-CABLE 未安裝、端點名稱不符、音訊服務未啟動 | 1. `Get-PnpDevice -Class AudioEndpoint -Status OK` 確認 `CABLE Input (VB-Audio Virtual Cable)` 存在<br>2. 重新安裝 VB-CABLE 驅動<br>3. 重啟 Windows Audio 服務 `Restart-Service Audiosrv` |
+| 安裝/更新報 `AdministratorRequired` / `InteractiveSessionRequired` | 權限不足或非互動式工作階段 | 以「系統管理員身分執行」開啟 PowerShell，確認 `$([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)` 為 `True` |
+| 安裝/更新報 `ConflictingTask` / `ConflictingFirewall` | 既有同名任務/規則但簽章不符（非本專案擁有） | 1. `Get-ScheduledTask -TaskPath '\wifimic\' -TaskName 'wifimic-client'` 檢查現有任務<br>2. `Get-NetFirewallRule -DisplayName 'wifimic-client'` 檢查現有規則<br>3. 手動移除衝突物件後重試 |
 | 排程工作狀態非 `Ready`/`Running` | 任務被停用、執行檔遺失、登入觸發未生效 | 1. `Get-ScheduledTask ...` 檢查 `State`、`Settings.Enabled`<br>2. 確認 `C:\Program Files\wifimic-client\wifimic_client.exe` 存在<br>3. 手動 `schtasks /Run /TN '\wifimic\wifimic-client'` 觀察啟動 |
-| 防火牆規則缺失或 RemoteAddress 不為 `192.168.0.210/32` | 安裝未完成、規則被手動刪除、群組原則覆寫 | 1. `Get-NetFirewallRule -DisplayName 'wifimic-client'` 確認存在<br>2. `Get-NetFirewallAddressFilter ...` 確認 `RemoteAddress`<br>3. 重新執行 bootstrap 安裝或已安裝用戶端的 `upgrade` |
-| `wifimic_client check-update` 失敗 | GitHub release 無法連線或版本資訊無法解析 | 確認網路與 GitHub 存取，再重試唯讀檢查 |
-| `wifimic_client upgrade --tag` 失敗 | 指定 release tag 不存在或格式不被接受 | 確認 GitHub Release 的 tag 拼寫，再以 `upgrade --tag vX.Y.Z` 重試 |
+| 防火牆規則缺失或 RemoteAddress 不為 `192.168.0.210/32` | 安裝未完成、規則被手動刪除、群組原則覆寫 | 1. `Get-NetFirewallRule -DisplayName 'wifimic-client'` 確認存在<br>2. `Get-NetFirewallAddressFilter ...` 確認 `RemoteAddress`<br>3. 重跑安裝/更新腳本（會自動修正簽章不符） |
+| 更新報 `DirtyCheckout` | 來源倉庫有未提交變更 | `git status --porcelain --untracked-files=all` 確認輸出為空；提交或暫存變更後重試 |
+| 更新報 `AmbiguousRevision` / `BadRevision` | 標籤/提交不存在、未抓取遠端、語法錯誤 | 1. 確認標籤名稱拼寫 `git tag -l`<br>2. `git fetch --tags --prune origin`<br>3. 修訂必須為單一標籤名或 7-64 字元十六進位提交雜湊 |
+| 更新報 `CrossVolumeSwap` | 暫存目錄與安裝目錄不在同一磁碟區 | 確保 `C:\src\wifimic` 與 `C:\Program Files\wifimic-client` 同屬 C: 槽；若不同，需手動調整暫存路徑邏輯 |
 
 ### 9.2 Linux 端常見失敗
 
@@ -591,7 +648,7 @@ Get-PnpDevice -Class AudioEndpoint -Status OK | Where-Object { $_.FriendlyName -
 | 腳本 | 現象 | 排查 |
 |------|------|------|
 | Linux 更新 | `wifimic server rollback could not prove an active service` | 1. 手動 `systemctl --user start wifimic-server`<br>2. 檢查 journal 是否有 `203/EXEC` 或 `EndpointNotFound`<br>3. 確認先前備份二進位檔 `~/.local/bin/wifimic_server` 完整 |
-| Windows 安裝/更新 | 安裝器退出碼 `21`，或更新入口顯示回復也失敗 | 1. 暫停重試並以系統管理員 PowerShell 檢查 `Get-ScheduledTask`、`Get-NetFirewallRule` 與安裝目錄<br>2. 確認 `wifimic_client.exe --version`、排程工作狀態與 VB-CABLE 端點，再依第 7.6 節驗證 |
+| Windows 更新 | `RollbackFailed: The prior executable hash was not restored` / `The prior task XML was not restored with the task enabled` | 1. 以系統管理員 PowerShell 手動還原：`schtasks /Change /TN '\wifimic\wifimic-client' /DISABLE` → 複製備份 exe → `schtasks /Create /TN '\wifimic\wifimic-client' /XML <backup.xml> /F` → `/ENABLE`<br>2. 檢查交易目錄 `.wifimic-client-transaction-*/prior-client.exe` 是否存在 |
 
 ---
 
@@ -667,9 +724,8 @@ Remove-Item -LiteralPath 'C:\Program Files\wifimic-client' -Recurse -Force
 - `deploy/linux/wifimic-server-iptables.sh` — iptables 規則定義
 - `deploy/linux/wifimic-server.nft` — nftables 規則集
 - `deploy/linux/update-wifimic-server.sh` — Linux 伺服器更新腳本
-- `apps/wifimic_client/src/bin/wifimic_client_installer.rs` — Windows 用戶端安裝器命令列入口
-- `apps/wifimic_client/src/installer.rs` — Windows 安裝/更新交易、主機變更與回滾
-- `apps/wifimic_client/src/client_update.rs` — Windows release 檢查、下載、驗證、暫存與提升更新
+- `deploy/windows/install-wifimic-client.ps1` — Windows 用戶端安裝腳本
+- `deploy/windows/update-wifimic-client.ps1` — Windows 用戶端更新腳本
 - `apps/wifimic_server/src/capture_types.rs` — 固定捕獲源與 `parec` 參數
 - `apps/wifimic_server/src/network.rs` — UDP 連接埠、對等端 IP、來源 IP 驗證邏輯
 - `apps/wifimic_client/src/lib.rs` — Windows 端點列舉、渲染管線

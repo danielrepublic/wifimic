@@ -5,7 +5,6 @@ use crate::control::{AudioRenderer, ControlError, ControlPlane, DatagramTranspor
 pub(crate) const APP_NAME: &str = "wifimic-client";
 pub(crate) const RESTART_LABEL: &str = "Restart";
 pub(crate) const EXIT_LABEL: &str = "Exit";
-pub(crate) const CHECK_UPDATE_LABEL: &str = "檢查更新…";
 
 /// Formats the tray icon tooltip as "{name} {version}", e.g. "wifimic-client v0.1.7".
 pub(crate) fn tooltip_text(name: &str, version: &str) -> String {
@@ -16,7 +15,6 @@ pub(crate) fn tooltip_text(name: &str, version: &str) -> String {
 pub(crate) enum MenuEventId {
     Restart,
     Exit,
-    CheckForUpdates,
     Unknown,
 }
 
@@ -45,10 +43,6 @@ impl MenuEvent {
         Self {
             id: MenuEventId::Unknown,
         }
-    }
-
-    pub(crate) const fn is_check_for_updates(self) -> bool {
-        matches!(self.id, MenuEventId::CheckForUpdates)
     }
 }
 
@@ -113,7 +107,6 @@ pub(crate) fn dispatch_menu_event<C: TrayControl>(
             *state = ClientRunState::ShutdownRequested;
             result.map(|()| TrayDispatch::ExitRequested)
         }
-        MenuEventId::CheckForUpdates => Ok(TrayDispatch::Ignored),
         MenuEventId::Unknown => Ok(TrayDispatch::Ignored),
     }
 }
@@ -145,7 +138,6 @@ pub(crate) struct TrayRuntime {
     _icon: tray_icon::TrayIcon,
     restart_item: tray_icon::menu::MenuItem,
     exit_item: tray_icon::menu::MenuItem,
-    check_update_item: tray_icon::menu::MenuItem,
 }
 
 #[cfg(windows)]
@@ -163,7 +155,6 @@ impl TrayRuntime {
         let menu = Menu::new();
         let restart_item = MenuItem::new(RESTART_LABEL, true, None);
         let exit_item = MenuItem::new(EXIT_LABEL, true, None);
-        let check_update_item = MenuItem::new(CHECK_UPDATE_LABEL, true, None);
         menu.append(&restart_item)
             .map_err(|source| TrayError::Operation {
                 operation: "append Restart menu item",
@@ -172,11 +163,6 @@ impl TrayRuntime {
         menu.append(&exit_item)
             .map_err(|source| TrayError::Operation {
                 operation: "append Exit menu item",
-                detail: Box::new(source),
-            })?;
-        menu.append(&check_update_item)
-            .map_err(|source| TrayError::Operation {
-                operation: "append Check for Updates menu item",
                 detail: Box::new(source),
             })?;
         let icon = TrayIconBuilder::new()
@@ -193,7 +179,6 @@ impl TrayRuntime {
             _icon: icon,
             restart_item,
             exit_item,
-            check_update_item,
         })
     }
 
@@ -205,8 +190,6 @@ impl TrayRuntime {
                 MenuEventId::Restart
             } else if event.id == self.exit_item.id() {
                 MenuEventId::Exit
-            } else if event.id == self.check_update_item.id() {
-                MenuEventId::CheckForUpdates
             } else {
                 MenuEventId::Unknown
             };
