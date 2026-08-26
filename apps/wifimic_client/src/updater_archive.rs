@@ -13,16 +13,14 @@ const CHECKSUM_NAME: &str = "wifimic-windows-x86_64.zip.sha256";
 
 /// Downloads, verifies, and safely extracts the Windows client release.
 pub fn download_and_verify_release(tag: &str) -> Result<PathBuf, UpdaterError> {
-    let archive = download_release_asset(tag, ARCHIVE_NAME).map_err(|error| {
-        UpdaterError::Download {
+    let archive =
+        download_release_asset(tag, ARCHIVE_NAME).map_err(|error| UpdaterError::Download {
             message: error.to_string(),
-        }
-    })?;
-    let manifest = download_release_asset(tag, CHECKSUM_NAME).map_err(|error| {
-        UpdaterError::Download {
+        })?;
+    let manifest =
+        download_release_asset(tag, CHECKSUM_NAME).map_err(|error| UpdaterError::Download {
             message: error.to_string(),
-        }
-    })?;
+        })?;
     let expected = std::str::from_utf8(&manifest)
         .ok()
         .and_then(|value| value.split_whitespace().next())
