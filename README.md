@@ -32,7 +32,7 @@ To install a specific release rather than the latest, download the release insta
 
 An already-installed server can check for and apply updates without re-running the install one-liner:
 
-- `wifimic_server check-update` — queries GitHub for a newer release (reports only, does not install)
+- `wifimic_server update` — queries GitHub for a newer release (reports only, does not install)
 - `wifimic_server upgrade [--tag vX.Y.Z]` — downloads, verifies, and installs a release with automatic rollback on failure
 
 These are manual, one-shot commands invoked by the user — not an automatic background update mechanism.

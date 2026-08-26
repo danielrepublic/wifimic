@@ -87,7 +87,7 @@ fn run_main() -> Result<(), MainError> {
             println!("{WIFIMIC_SERVER_VERSION}");
             Ok(())
         }
-        Command::CheckUpdate => {
+        Command::Update => {
             let result = run_check_update(&NativeTagDiscovery, WIFIMIC_SERVER_VERSION)?;
             println!("{}", result.render());
             Ok(())

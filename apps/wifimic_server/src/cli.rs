@@ -11,7 +11,7 @@ pub(crate) enum Command {
     /// Prints the embedded build version.
     Version,
     /// Checks the latest public release without changing local state.
-    CheckUpdate,
+    Update,
     /// Downloads and installs a release with rollback protection.
     Upgrade { tag: Option<String> },
     /// Prints service version and systemd state.
@@ -51,7 +51,7 @@ where
 
     match first.as_str() {
         "-v" | "--version" => finish_simple_command(Command::Version, arguments),
-        "check-update" => finish_simple_command(Command::CheckUpdate, arguments),
+        "update" => finish_simple_command(Command::Update, arguments),
         "status" => finish_simple_command(Command::Status, arguments),
         "doctor" => finish_simple_command(Command::Doctor, arguments),
         "upgrade" => parse_upgrade(arguments),
@@ -154,7 +154,7 @@ mod tests {
             ),
             (vec!["wifimic_server", "-v"], Command::Version),
             (vec!["wifimic_server", "--version"], Command::Version),
-            (vec!["wifimic_server", "check-update"], Command::CheckUpdate),
+            (vec!["wifimic_server", "update"], Command::Update),
             (
                 vec!["wifimic_server", "upgrade"],
                 Command::Upgrade { tag: None },
@@ -203,6 +203,23 @@ mod tests {
             result,
             Err(CliParseError::Unrecognized {
                 argument: "--surprise".to_owned()
+            })
+        );
+    }
+
+    #[test]
+    fn rejects_check_update_as_unrecognized() {
+        // Given
+        let arguments = ["wifimic_server", "check-update"];
+
+        // When
+        let result = parse(&arguments);
+
+        // Then
+        assert_eq!(
+            result,
+            Err(CliParseError::Unrecognized {
+                argument: "check-update".to_owned()
             })
         );
     }
