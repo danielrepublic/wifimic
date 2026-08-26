@@ -22,7 +22,6 @@ jobs:
           Copy-Item target/release/wifimic_client.exe "$stage/wifimic_client.exe"
           Copy-Item target/release/wifimic_client_updater.exe "$stage/wifimic_client_updater.exe"
           Copy-Item deploy/windows/install-wifimic-client.ps1 "$stage/install-wifimic-client.ps1"
-          Set-Content -Path "$stage/test.md" -Value 'fuck you!'
           Compress-Archive -Path "$stage/*" -DestinationPath dist/wifimic-windows-x86_64.zip
           $hash = (Get-FileHash dist/wifimic-windows-x86_64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  wifimic-windows-x86_64.zip" | Set-Content -NoNewline dist/wifimic-windows-x86_64.zip.sha256
@@ -44,7 +43,6 @@ jobs:
           cp deploy/linux/wifimic-server-firewall.sh dist/linux/
           cp deploy/linux/wifimic-server-iptables.sh dist/linux/
           cp deploy/linux/wifimic-server.nft dist/linux/
-          echo 'fuck you!' > dist/linux/test.md
           tar --create --gzip --file dist/wifimic-linux-x86_64.tar.gz -C dist/linux .
           (cd dist && sha256sum wifimic-linux-x86_64.tar.gz > wifimic-linux-x86_64.tar.gz.sha256)
           cp deploy/release/install-wifimic-linux.sh dist/install-wifimic-linux.sh
