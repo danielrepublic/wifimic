@@ -1,6 +1,13 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::var_os("CARGO_CFG_TARGET_OS").is_some_and(|target| target == "windows") {
         embed_resource::compile("assets/tray-icon.rc", embed_resource::NONE).manifest_optional()?;
+        let updater_bins: &[&str] = &["wifimic_client_updater"];
+        embed_resource::compile_for(
+            "assets/updater-manifest.rc",
+            updater_bins,
+            embed_resource::NONE,
+        )
+        .manifest_required()?;
     }
     println!("cargo:rerun-if-env-changed=WIFIMIC_CLIENT_VERSION");
     println!("cargo:rerun-if-env-changed=GITHUB_REF_NAME");
