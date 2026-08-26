@@ -73,7 +73,12 @@ fn assert_failure_rolls_back(failure: FailurePoint, primary_calls: &[&'static st
         "get_task",
     ];
     expected_calls.extend_from_slice(primary_calls);
-    expected_calls.extend_from_slice(&["restore_executable", "restore_task", "start_task"]);
+    expected_calls.extend_from_slice(&[
+        "stop_task",
+        "restore_executable",
+        "restore_task",
+        "start_task",
+    ]);
     assert_eq!(operations.state.calls, expected_calls);
 }
 
@@ -162,6 +167,7 @@ fn health_failure_rolls_back_and_returns_rolled_back() {
             "start_task",
             "check_render_endpoint_enumerable",
             "wait_for_healthy",
+            "stop_task",
             "restore_executable",
             "restore_task",
             "start_task",
@@ -193,6 +199,7 @@ fn endpoint_check_failure_rolls_back_and_returns_rolled_back() {
             "enable_task",
             "start_task",
             "check_render_endpoint_enumerable",
+            "stop_task",
             "restore_executable",
             "restore_task",
             "start_task",

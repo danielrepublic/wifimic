@@ -209,6 +209,10 @@ fn rollback<O: UpdaterOperations>(
     install_path: &Path,
     snapshot: &TaskSnapshot,
 ) -> UpdaterOutcome {
+    // A failed health check occurs after the replacement client has started.
+    // Stop it before restoring its executable, otherwise Windows can reject
+    // the replacement and make a successful rollback look unverified.
+    let _ = operations.stop_task();
     let executable_restored = operations
         .restore_executable(backup_path, install_path)
         .is_ok();
