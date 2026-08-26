@@ -2,6 +2,8 @@ pub mod control;
 pub mod jitter;
 pub mod render;
 pub mod updater;
+#[cfg(target_os = "windows")]
+pub mod updater_native;
 
 #[cfg(test)]
 #[path = "updater_test_support.rs"]

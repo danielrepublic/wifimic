@@ -1,0 +1,239 @@
+use std::ffi::OsStr;
+use std::fs;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
+use std::thread;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use crate::updater::{TaskSnapshot, UpdaterError, UpdaterOperations};
+
+const TASK_PATH: &str = r"\wifimic\wifimic-client";
+const CLIENT_INSTALL_PATH: &str = r"C:\Program Files\wifimic-client\wifimic_client.exe";
+
+/// Executes the installed Windows client's update operations.
+#[derive(Debug, Default)]
+pub struct NativeUpdaterOperations;
+
+impl UpdaterOperations for NativeUpdaterOperations {
+    fn resolve_latest_tag(&mut self) -> Result<String, UpdaterError> {
+        wifimic_update::discover_latest_tag().map_err(UpdaterError::from)
+    }
+
+    fn download_and_verify(&mut self, tag: &str) -> Result<PathBuf, UpdaterError> {
+        crate::updater::download_and_verify_release(tag)
+    }
+
+    fn backup_current_executable(&mut self, backup_path: &Path) -> Result<(), UpdaterError> {
+        fs::copy(client_install_path(), backup_path)
+            .map(|_| ())
+            .map_err(|error| UpdaterError::Backup {
+                message: error.to_string(),
+            })
+    }
+
+    fn restore_executable(
+        &mut self,
+        backup_path: &Path,
+        _install_path: &Path,
+    ) -> Result<(), UpdaterError> {
+        let install_path = client_install_path();
+        let temporary = sibling_path(install_path, ".wifimic_client.rollback");
+        fs::copy(backup_path, &temporary).map_err(|error| UpdaterError::Restore {
+            message: error.to_string(),
+        })?;
+        fs::rename(&temporary, install_path).map_err(|error| UpdaterError::Restore {
+            message: error.to_string(),
+        })
+    }
+
+    fn get_task(&mut self) -> Result<TaskSnapshot, UpdaterError> {
+        let xml = run_schtasks("get_task_xml", ["/Query", "/TN", TASK_PATH, "/XML"])?;
+        let state = run_schtasks(
+            "get_task_state",
+            ["/Query", "/TN", TASK_PATH, "/FO", "LIST", "/V"],
+        )?;
+        let xml = String::from_utf8(xml.stdout).map_err(|error| UpdaterError::Task {
+            operation: "get_task_xml",
+            message: error.to_string(),
+        })?;
+        let state = parse_task_state(&String::from_utf8_lossy(&state.stdout));
+        Ok(TaskSnapshot::new(xml, state.enabled, state.running))
+    }
+
+    fn disable_task(&mut self) -> Result<(), UpdaterError> {
+        run_schtasks("disable_task", ["/Change", "/TN", TASK_PATH, "/DISABLE"]).map(|_| ())
+    }
+
+    fn stop_task(&mut self) -> Result<(), UpdaterError> {
+        run_schtasks("stop_task", ["/End", "/TN", TASK_PATH]).map(|_| ())
+    }
+
+    fn restore_task(&mut self, snapshot: &TaskSnapshot) -> Result<(), UpdaterError> {
+        let temporary = std::env::temp_dir().join(format!(
+            "wifimic-client-task-{}-{}.xml",
+            std::process::id(),
+            timestamp()
+        ));
+        let result = (|| {
+            let mut file = fs::File::create(&temporary).map_err(|error| UpdaterError::Task {
+                operation: "restore_task",
+                message: error.to_string(),
+            })?;
+            file.write_all(snapshot.xml().as_bytes())
+                .map_err(|error| UpdaterError::Task {
+                    operation: "restore_task",
+                    message: error.to_string(),
+                })?;
+            run_schtasks(
+                "restore_task",
+                vec![
+                    OsStr::new("/Create").to_owned(),
+                    OsStr::new("/TN").to_owned(),
+                    OsStr::new(TASK_PATH).to_owned(),
+                    OsStr::new("/XML").to_owned(),
+                    temporary.as_os_str().to_owned(),
+                    OsStr::new("/F").to_owned(),
+                ],
+            )?;
+            let state_switch = if snapshot.enabled() {
+                "/ENABLE"
+            } else {
+                "/DISABLE"
+            };
+            run_schtasks(
+                "restore_task_state",
+                ["/Change", "/TN", TASK_PATH, state_switch],
+            )?;
+            Ok(())
+        })();
+        let _ = fs::remove_file(&temporary);
+        result
+    }
+
+    fn enable_task(&mut self) -> Result<(), UpdaterError> {
+        run_schtasks("enable_task", ["/Change", "/TN", TASK_PATH, "/ENABLE"]).map(|_| ())
+    }
+
+    fn start_task(&mut self) -> Result<(), UpdaterError> {
+        run_schtasks("start_task", ["/Run", "/TN", TASK_PATH]).map(|_| ())
+    }
+
+    fn atomic_swap_executable(
+        &mut self,
+        staged: &Path,
+        _install_path: &Path,
+    ) -> Result<(), UpdaterError> {
+        let install_path = client_install_path();
+        let temporary = sibling_path(install_path, ".wifimic_client.upgrade");
+        fs::copy(staged, &temporary).map_err(|error| UpdaterError::Swap {
+            message: error.to_string(),
+        })?;
+        fs::rename(&temporary, install_path).map_err(|error| UpdaterError::Swap {
+            message: error.to_string(),
+        })
+    }
+
+    fn check_render_endpoint_enumerable(&mut self) -> Result<bool, UpdaterError> {
+        let endpoints = crate::render::enumerate_render_endpoints().map_err(|error| {
+            UpdaterError::Endpoint {
+                message: error.to_string(),
+            }
+        })?;
+        Ok(endpoints
+            .iter()
+            .any(|endpoint| endpoint == crate::render::DEFAULT_RENDER_ENDPOINT))
+    }
+
+    fn wait_for_healthy(&mut self, timeout: Duration) -> Result<bool, UpdaterError> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            let state = run_schtasks(
+                "health_task_state",
+                ["/Query", "/TN", TASK_PATH, "/FO", "LIST", "/V"],
+            )?;
+            let state = parse_task_state(&String::from_utf8_lossy(&state.stdout));
+            if state.enabled && state.ready && self.check_render_endpoint_enumerable()? {
+                return Ok(true);
+            }
+            if Instant::now() >= deadline {
+                return Ok(false);
+            }
+            thread::sleep(Duration::from_millis(250));
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct TaskState {
+    enabled: bool,
+    running: bool,
+    ready: bool,
+}
+
+fn run_schtasks<I, S>(operation: &'static str, args: I) -> Result<Output, UpdaterError>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let output = Command::new("schtasks.exe")
+        .args(args)
+        .output()
+        .map_err(|error| UpdaterError::Task {
+            operation,
+            message: error.to_string(),
+        })?;
+    if output.status.success() {
+        Ok(output)
+    } else {
+        Err(UpdaterError::Task {
+            operation,
+            message: command_output_message(&output),
+        })
+    }
+}
+
+fn command_output_message(output: &Output) -> String {
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+    if !stderr.is_empty() {
+        return stderr;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    if !stdout.is_empty() {
+        return stdout;
+    }
+    output.status.to_string()
+}
+
+fn parse_task_state(output: &str) -> TaskState {
+    let enabled = task_value(output, "Scheduled Task State:")
+        .is_some_and(|value| value.eq_ignore_ascii_case("Enabled"));
+    let status = task_value(output, "Status:");
+    TaskState {
+        enabled,
+        running: status.is_some_and(|value| value.eq_ignore_ascii_case("Running")),
+        ready: status.is_some_and(|value| {
+            value.eq_ignore_ascii_case("Ready") || value.eq_ignore_ascii_case("Running")
+        }),
+    }
+}
+
+fn task_value<'a>(output: &'a str, label: &str) -> Option<&'a str> {
+    output
+        .lines()
+        .find_map(|line| line.trim_start().strip_prefix(label).map(str::trim))
+}
+
+fn client_install_path() -> &'static Path {
+    Path::new(CLIENT_INSTALL_PATH)
+}
+
+fn sibling_path(path: &Path, prefix: &str) -> PathBuf {
+    path.with_file_name(format!("{prefix}-{}-{}", std::process::id(), timestamp()))
+}
+
+fn timestamp() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_nanos())
+}
