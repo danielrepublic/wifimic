@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use sha2::{Digest, Sha256};
+
 pub mod transaction;
 
 pub use transaction::{
@@ -52,6 +54,12 @@ pub enum UpdateError {
         "cannot determine a stable version comparison for {current:?}; use an explicit vMAJOR.MINOR.PATCH target"
     )]
     IndeterminateVersion { current: String },
+    /// The checksum manifest is malformed or does not contain a valid SHA-256 digest.
+    #[error("release checksum manifest is malformed")]
+    InvalidChecksumManifest,
+    /// The downloaded archive did not match its published checksum digest.
+    #[error("release checksum mismatch: expected {expected}, got {actual}")]
+    ChecksumMismatch { expected: String, actual: String },
 }
 
 /// Parses a GitHub release redirect URL into its strict `vMAJOR.MINOR.PATCH` tag.
@@ -194,9 +202,33 @@ pub fn download_release_asset(tag: &str, asset: &str) -> Result<Vec<u8>, UpdateE
         })
 }
 
+/// Verifies a release artifact's checksum against a manifest.
+///
+/// Parses the manifest bytes for a 64-hex lowercase SHA-256 digest and compares
+/// it against the SHA-256 of the archive bytes.
+///
+/// # Errors
+/// Returns [`UpdateError::InvalidChecksumManifest`] if the manifest does not
+/// contain a valid 64-hex lowercase digest. Returns
+/// [`UpdateError::ChecksumMismatch`] if the computed digest does not match.
+pub fn verify_release_fingerprint(archive_bytes: &[u8], manifest_bytes: &[u8]) -> Result<(), UpdateError> {
+    let expected = std::str::from_utf8(manifest_bytes)
+        .ok()
+        .and_then(|value| value.split_whitespace().next())
+        .filter(|value| value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        .map(str::to_ascii_lowercase)
+        .ok_or(UpdateError::InvalidChecksumManifest)?;
+    let actual = format!("{:x}", Sha256::digest(archive_bytes));
+    if expected != actual {
+        return Err(UpdateError::ChecksumMismatch { expected, actual });
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{compare_versions, is_release_tag, parse_release_tag, VersionComparison};
+    use super::{compare_versions, is_release_tag, parse_release_tag, VersionComparison, verify_release_fingerprint, UpdateError};
+    use sha2::{Digest, Sha256};
 
     #[test]
     fn compares_equal_versions() {
@@ -304,5 +336,60 @@ mod tests {
         // Then
         assert!(valid_result);
         assert!(invalid_results.all(|result| !result));
+    }
+
+    #[test]
+    fn verify_release_fingerprint_happy_path() {
+        // Given
+        let digest = Sha256::digest(b"test archive data");
+        let expected_hex = format!("{:x}", digest);
+        let manifest = format!("{}  test archive data", expected_hex);
+
+        // When
+        let result = verify_release_fingerprint(b"test archive data", manifest.as_bytes());
+
+        // Then
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn verify_release_fingerprint_mismatched_digest() {
+        // Given
+        let archive = b"some archive data";
+        let manifest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+        // When
+        let result = verify_release_fingerprint(archive, manifest.as_bytes());
+
+        // Then
+        assert!(matches!(result, Err(UpdateError::ChecksumMismatch { .. })));
+    }
+
+    #[test]
+    fn verify_release_fingerprint_malformed_manifest() {
+        // Given
+        let archive = b"some archive data";
+        let manifest = "this is not a valid manifest";
+
+        // When
+        let result = verify_release_fingerprint(archive, manifest.as_bytes());
+
+        // Then
+        assert!(matches!(result, Err(UpdateError::InvalidChecksumManifest)));
+    }
+
+    #[test]
+    fn verify_release_fingerprint_uppercase_manifest_normalizes() {
+        // Given
+        let archive_bytes = b"test data";
+        let expected_sha = Sha256::digest(archive_bytes);
+        let expected_hex = format!("{:x}", expected_sha);
+        let manifest = format!("{}  test data", expected_hex.to_ascii_uppercase());
+
+        // When
+        let result = verify_release_fingerprint(archive_bytes, manifest.as_bytes());
+
+        // Then
+        assert!(result.is_ok());
     }
 }
