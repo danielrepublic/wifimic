@@ -5,6 +5,7 @@ pub mod jitter;
 pub mod logging;
 pub mod render;
 
+mod cli;
 mod latency_diagnostic;
 mod tray;
 use latency_diagnostic::run_latency_diagnostic;
