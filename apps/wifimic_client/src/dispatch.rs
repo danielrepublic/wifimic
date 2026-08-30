@@ -1,13 +1,35 @@
 use crate::{cli, doctor, logging, status};
 
+/// Reports a transitional dispatch arm that has not yet been wired to its
+/// real implementation by a later todo.
+///
+/// Both variants are deterministic, testable errors: neither arm downloads,
+/// mutates local state, or elevates. Todo 14 replaces
+/// [`DispatchError::UpgradeUnavailableUntilHandoff`] with the real
+/// non-elevated preflight and handoff launch; todo 15 replaces
+/// [`DispatchError::InternalApplyUnavailableUntilAdapter`] with
+/// `WindowsUpgradeAdapter`.
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub(crate) enum DispatchError {
+    /// `upgrade` was requested before the handoff-script launcher exists.
+    #[error("upgrade is not available until the handoff launcher is implemented")]
+    UpgradeUnavailableUntilHandoff,
+    /// `--internal-apply-upgrade` was requested before the Windows adapter exists.
+    #[error("--internal-apply-upgrade is not available until the Windows adapter is implemented")]
+    InternalApplyUnavailableUntilAdapter,
+}
+
 /// Runs the command selected by [`cli::parse_command`].
 ///
 /// [`cli::Command::RunAudio`] preserves today's default behavior exactly:
 /// diagnostics logging is initialized, then the audio client loop runs. The
-/// other three commands are one-shot, non-mutating queries — they never
+/// other commands are one-shot, non-mutating queries — they never
 /// initialize diagnostics logging (see [`requires_diagnostics`]) and, on
 /// Windows, attach to an inherited console so their output is visible, since
 /// this binary is a GUI-subsystem process with no console by default.
+/// [`cli::Command::InternalApplyUpgrade`] is the sole exception: its stdout
+/// is owned by the elevated handoff script's own capture, so it does not
+/// attach a console.
 pub(crate) fn dispatch(command: cli::Command) -> Result<(), Box<dyn std::error::Error>> {
     if requires_diagnostics(&command) {
         let (_diagnostics, _startup_rotation) = logging::initialize_diagnostics()?;
@@ -61,6 +83,13 @@ pub(crate) fn dispatch(command: cli::Command) -> Result<(), Box<dyn std::error::
             } else {
                 Err("one or more doctor checks failed".into())
             }
+        }
+        cli::Command::Upgrade { target: _ } => {
+            attach_console();
+            Err(DispatchError::UpgradeUnavailableUntilHandoff.into())
+        }
+        cli::Command::InternalApplyUpgrade { tag: _ } => {
+            Err(DispatchError::InternalApplyUnavailableUntilAdapter.into())
         }
     }
 }
