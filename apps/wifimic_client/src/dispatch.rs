@@ -1,7 +1,6 @@
-use crate::{cli, doctor, logging, status};
+use crate::{cli, doctor, handoff, logging, status};
 
-/// Reports a transitional dispatch arm that has not yet been wired to its
-/// real implementation by a later todo.
+/// Reports the internal update entry point that is not wired until a later todo.
 ///
 /// Both variants are deterministic, testable errors: neither arm downloads,
 /// mutates local state, or elevates. Todo 14 replaces
@@ -11,9 +10,6 @@ use crate::{cli, doctor, logging, status};
 /// `WindowsUpgradeAdapter`.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub(crate) enum DispatchError {
-    /// `upgrade` was requested before the handoff-script launcher exists.
-    #[error("upgrade is not available until the handoff launcher is implemented")]
-    UpgradeUnavailableUntilHandoff,
     /// `--internal-apply-upgrade` was requested before the Windows adapter exists.
     #[error("--internal-apply-upgrade is not available until the Windows adapter is implemented")]
     InternalApplyUnavailableUntilAdapter,
@@ -84,9 +80,21 @@ pub(crate) fn dispatch(command: cli::Command) -> Result<(), Box<dyn std::error::
                 Err("one or more doctor checks failed".into())
             }
         }
-        cli::Command::Upgrade { target: _ } => {
+        cli::Command::Upgrade { target } => {
             attach_console();
-            Err(DispatchError::UpgradeUnavailableUntilHandoff.into())
+            match handoff::run_upgrade(
+                &handoff::NativeHandoffOperations,
+                &target,
+                env!("WIFIMIC_CLIENT_VERSION"),
+            )? {
+                handoff::UpgradeOutcome::NoOp { current, latest } => {
+                    println!("目前版本 {current} 已是最新版本 ({latest})");
+                }
+                handoff::UpgradeOutcome::HandoffLaunched { tag } => {
+                    println!("正在以系統管理員權限準備更新至 {tag}");
+                }
+            }
+            Ok(())
         }
         cli::Command::InternalApplyUpgrade { tag: _ } => {
             Err(DispatchError::InternalApplyUnavailableUntilAdapter.into())

@@ -36,24 +36,6 @@ fn only_run_audio_requires_diagnostics_initialization() {
 }
 
 #[test]
-fn upgrade_is_a_deterministic_transitional_error() {
-    // Given
-    let command = cli::Command::Upgrade {
-        target: UpdateTarget::Latest,
-    };
-
-    // When
-    let result = dispatch(command);
-
-    // Then
-    let error = result.expect_err("upgrade must fail until todo 14 wires the handoff launcher");
-    assert_eq!(
-        error.downcast_ref::<DispatchError>(),
-        Some(&DispatchError::UpgradeUnavailableUntilHandoff)
-    );
-}
-
-#[test]
 fn internal_apply_upgrade_is_a_deterministic_transitional_error() {
     // Given
     let command = cli::Command::InternalApplyUpgrade {
