@@ -1,0 +1,11 @@
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory = $true)]
+    [int]$ParentProcessId,
+    [Parameter(Mandatory = $true)]
+    [string]$ReleaseTag,
+    [Parameter(Mandatory = $true)]
+    [string]$ClientExecutable
+)
+
+$ErrorActionPreference = 'Stop'

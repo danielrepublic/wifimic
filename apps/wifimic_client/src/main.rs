@@ -8,6 +8,7 @@ pub mod render;
 mod cli;
 mod dispatch;
 mod doctor;
+mod handoff;
 mod latency_diagnostic;
 mod status;
 mod tray;
