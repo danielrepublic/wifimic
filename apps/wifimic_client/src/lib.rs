@@ -1,6 +1,7 @@
 pub mod control;
 pub mod jitter;
 pub mod render;
+pub mod task_query;
 pub mod updater;
 pub mod update_cli;
 #[cfg(target_os = "windows")]

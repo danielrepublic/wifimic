@@ -18,7 +18,7 @@ impl TagDiscovery for NativeTagDiscovery {
 
 /// Represents a successful, non-mutating update check.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum CheckUpdateOutcome {
+pub enum CheckUpdateOutcome {
     /// The current and latest release tags are equal.
     UpToDate { current: String, latest: String },
     /// A newer release is available.
@@ -42,7 +42,7 @@ impl CheckUpdateOutcome {
 }
 
 /// Renders the one-line output for a check result.
-pub(crate) fn render_check_update(result: &Result<CheckUpdateOutcome, UpdateError>) -> String {
+pub fn render_check_update(result: &Result<CheckUpdateOutcome, UpdateError>) -> String {
     match result {
         Ok(outcome) => outcome.render(),
         Err(error) => format!("更新檢查失敗：{error}"),
@@ -51,7 +51,7 @@ pub(crate) fn render_check_update(result: &Result<CheckUpdateOutcome, UpdateErro
 
 /// Returns the process exit code for a check result.
 #[must_use]
-pub(crate) fn check_update_exit_code(result: &Result<CheckUpdateOutcome, UpdateError>) -> u8 {
+pub fn check_update_exit_code(result: &Result<CheckUpdateOutcome, UpdateError>) -> u8 {
     if result.is_ok() {
         0
     } else {
@@ -92,14 +92,12 @@ pub(crate) fn run_check_update<D: TagDiscovery>(
 }
 
 /// Handler: runs a non-mutating update check using `NativeTagDiscovery` and
-/// the compiled client version from `CARGO_PKG_VERSION` (exposed via `env!`).
+/// the compiled client version embedded by `build.rs` (`WIFIMIC_CLIENT_VERSION`).
 ///
-/// This is intended as the dispatch target for the `wifimic_client update`
-/// CLI subcommand. It does not download or install anything — it only reports
+/// This is the dispatch target for the `wifimic_client update` CLI
+/// subcommand. It does not download or install anything — it only reports
 /// the comparison between the current version and the latest GitHub release.
-#[cfg(feature = "windows")]
-#[cfg_attr(target_os = "windows", allow(unused))]
-pub(crate) fn handle_check_update() -> Result<CheckUpdateOutcome, UpdateError> {
+pub fn handle_check_update() -> Result<CheckUpdateOutcome, UpdateError> {
     run_check_update(&NativeTagDiscovery, env!("WIFIMIC_CLIENT_VERSION"))
 }
 

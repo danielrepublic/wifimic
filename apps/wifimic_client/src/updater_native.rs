@@ -6,6 +6,7 @@ use std::process::{Command, Output};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use crate::task_query::{NativeTaskQuery, TaskQuery};
 use crate::updater::{TaskSnapshot, UpdaterError, UpdaterOperations};
 
 const TASK_PATH: &str = r"\wifimic\wifimic-client";
@@ -78,7 +79,12 @@ impl UpdaterOperations for NativeUpdaterOperations {
             operation: "get_task_xml",
             message: error.to_string(),
         })?;
-        let state = query_task_state()?;
+        let state = NativeTaskQuery
+            .state()
+            .map_err(|error| UpdaterError::Task {
+                operation: "get_task_state",
+                message: error.to_string(),
+            })?;
         Ok(TaskSnapshot::new(xml, state.enabled, state.running))
     }
 
@@ -171,7 +177,12 @@ impl UpdaterOperations for NativeUpdaterOperations {
     fn wait_for_healthy(&mut self, timeout: Duration) -> Result<bool, UpdaterError> {
         let deadline = Instant::now() + timeout;
         loop {
-            let state = query_task_state()?;
+            let state = NativeTaskQuery
+                .state()
+                .map_err(|error| UpdaterError::Task {
+                    operation: "get_task_state",
+                    message: error.to_string(),
+                })?;
             if state.enabled && state.ready && self.check_render_endpoint_enumerable()? {
                 return Ok(true);
             }
@@ -181,13 +192,6 @@ impl UpdaterOperations for NativeUpdaterOperations {
             thread::sleep(HEALTH_POLL_INTERVAL);
         }
     }
-}
-
-#[derive(Debug, Default)]
-struct TaskState {
-    enabled: bool,
-    running: bool,
-    ready: bool,
 }
 
 fn run_schtasks<I, S>(operation: &'static str, args: I) -> Result<Output, UpdaterError>
@@ -228,72 +232,6 @@ fn command_output_message(output: &Output) -> String {
     output.status.to_string()
 }
 
-fn query_task_state() -> Result<TaskState, UpdaterError> {
-    let output = Command::new("powershell.exe")
-        .args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            r#"$task = Get-ScheduledTask -TaskPath '\wifimic\' -TaskName 'wifimic-client' -ErrorAction Stop; Write-Output ([int]$task.Settings.Enabled); Write-Output ([string]$task.State)"#,
-        ])
-        .output()
-        .map_err(|error| UpdaterError::Task {
-            operation: "get_task_state",
-            message: error.to_string(),
-        })?;
-    if !output.status.success() {
-        return Err(UpdaterError::Task {
-            operation: "get_task_state",
-            message: command_output_message(&output),
-        });
-    }
-    parse_task_state_output(&String::from_utf8_lossy(&output.stdout))
-}
-
-fn parse_task_state_output(output: &str) -> Result<TaskState, UpdaterError> {
-    let mut values = output
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty());
-    let enabled = match values.next() {
-        Some("1") => true,
-        Some("0") => false,
-        Some(value) => {
-            return Err(UpdaterError::Task {
-                operation: "get_task_state",
-                message: format!("unexpected enabled value: {value}"),
-            });
-        }
-        None => {
-            return Err(UpdaterError::Task {
-                operation: "get_task_state",
-                message: "missing enabled value".to_owned(),
-            });
-        }
-    };
-    let status = match values.next() {
-        Some("Ready") => (false, true),
-        Some("Running") => (true, true),
-        Some(value) => {
-            return Err(UpdaterError::Task {
-                operation: "get_task_state",
-                message: format!("unexpected task state: {value}"),
-            });
-        }
-        None => {
-            return Err(UpdaterError::Task {
-                operation: "get_task_state",
-                message: "missing task state".to_owned(),
-            });
-        }
-    };
-    Ok(TaskState {
-        enabled,
-        running: status.0,
-        ready: status.1,
-    })
-}
-
 fn task_xml_bytes(xml: &str) -> Vec<u8> {
     let mut bytes = vec![0xFF, 0xFE];
     for code_unit in xml.encode_utf16() {
@@ -318,7 +256,7 @@ fn timestamp() -> u128 {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_task_state_output, task_xml_bytes};
+    use super::task_xml_bytes;
 
     #[test]
     fn restore_task_serializes_declared_utf16_xml() {
@@ -338,19 +276,5 @@ mod tests {
             String::from_utf16(&code_units).expect("UTF-16 bytes decode"),
             xml
         );
-    }
-
-    #[test]
-    fn parses_locale_independent_task_state_output() {
-        // Given
-        let output = "1\r\nReady\r\n";
-
-        // When
-        let state = parse_task_state_output(output).expect("task state parses");
-
-        // Then
-        assert!(state.enabled);
-        assert!(!state.running);
-        assert!(state.ready);
     }
 }

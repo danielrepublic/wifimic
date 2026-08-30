@@ -6,8 +6,12 @@ pub mod logging;
 pub mod render;
 
 mod cli;
+mod dispatch;
+mod doctor;
 mod latency_diagnostic;
+mod status;
 mod tray;
+use dispatch::dispatch;
 use latency_diagnostic::run_latency_diagnostic;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -28,18 +32,17 @@ enum CalibrationCliError {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let (_diagnostics, _startup_rotation) = logging::initialize_diagnostics()?;
     if std::env::args().any(|argument| argument == "--calibrate") {
+        let (_diagnostics, _startup_rotation) = logging::initialize_diagnostics()?;
         run_calibration()?;
         return Ok(());
     }
     if std::env::args().any(|argument| argument == "--diagnose-latency") {
+        let (_diagnostics, _startup_rotation) = logging::initialize_diagnostics()?;
         run_latency_diagnostic()?;
         return Ok(());
     }
-    #[cfg(target_os = "windows")]
-    run_windows_client()?;
-    Ok(())
+    dispatch(cli::parse_command(std::env::args())?)
 }
 
 const CALIBRATION_PROBE_COUNT: u32 = 4;
