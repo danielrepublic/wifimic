@@ -166,3 +166,45 @@ fn upgrade_without_a_tag_is_a_noop_when_latest_matches_current() {
     );
     assert_eq!(adapter.state.calls, ["discover"]);
 }
+
+#[test]
+fn upgrade_without_a_tag_installs_when_current_is_newer_than_latest() {
+    // Given
+    let mut adapter = FakeUpdateAdapter::with_failure(None);
+
+    // When
+    let result =
+        run_update_transaction(&mut adapter, UpdateTarget::Latest, "v0.3.0", HEALTH_TIMEOUT);
+
+    // Then
+    assert_eq!(
+        result,
+        Ok(TransactionOutcome::Installed {
+            tag: "v0.2.0".to_owned(),
+        })
+    );
+}
+
+#[test]
+fn upgrade_with_an_explicit_tag_equal_to_current_is_a_noop() {
+    // Given
+    let mut adapter = FakeUpdateAdapter::with_failure(None);
+
+    // When
+    let result = run_update_transaction(
+        &mut adapter,
+        UpdateTarget::Tag("v0.1.12".to_owned()),
+        "v0.1.12",
+        HEALTH_TIMEOUT,
+    );
+
+    // Then
+    assert_eq!(
+        result,
+        Ok(TransactionOutcome::NoOp {
+            current: "v0.1.12".to_owned(),
+            latest: "v0.1.12".to_owned(),
+        })
+    );
+    assert!(adapter.state.calls.is_empty());
+}
