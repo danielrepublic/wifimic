@@ -1,3 +1,33 @@
+//! The shared Update Contract for wifimic.
+//!
+//! This crate is the single deep module that owns the update transaction both
+//! platforms follow. It resolves an [`UpdateTarget`], verifies a release
+//! artifact's fingerprint, and runs the fixed
+//! `backup → pre_swap → swap → post_swap → health_check → rollback` order
+//! through the narrow [`UpdateAdapter`] trait. Adapters own only platform
+//! mechanics: archive handling, process lifecycle, and health-check details.
+//! The transaction order, the rollback semantics, and the outcome/error types
+//! live here and nowhere else.
+//!
+//! The contract is defined in `CONTEXT.md` ("更新合約 (Update Contract)") and
+//! its intent is recorded in
+//! [`docs/adr/0001-windows-update-moves-from-source-build-to-self-updater-binary.md`](../../../docs/adr/0001-windows-update-moves-from-source-build-to-self-updater-binary.md).
+//!
+//! # Windows handoff
+//!
+//! On Windows, `wifimic_client upgrade` cannot replace a running executable,
+//! so it elevates a thin handoff script that performs the transaction by
+//! invoking **a temporary runner copy** of `wifimic_client.exe` with the
+//! hidden `--internal-apply-upgrade <tag>` entry point. The runner is copied
+//! from the canonical install path to a unique temporary path and deleted
+//! after use; the canonical path is never invoked directly, because a process
+//! must not replace its own currently-executing image. The transaction logic
+//! is **not** reimplemented in PowerShell: the handoff script only waits for
+//! the parent process to exit and relays the validated tag to the runner, so
+//! 100% of the transaction stays in this already-testable Rust engine. This
+//! design choice is recorded in the plan's Decision 4 and todo 16's
+//! round-13 self-replacement fix.
+
 use std::time::Duration;
 
 use sha2::{Digest, Sha256};
