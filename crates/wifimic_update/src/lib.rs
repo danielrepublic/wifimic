@@ -2,7 +2,10 @@ use std::time::Duration;
 
 pub mod transaction;
 
-pub use transaction::{parse_update_target, resolve_action, ResolvedAction, UpdateTarget};
+pub use transaction::{
+    parse_update_target, resolve_action, run_update_transaction, ResolvedAction, RollbackOutcome,
+    TransactionError, TransactionOutcome, UpdateAdapter, UpdateTarget,
+};
 
 const GITHUB_OWNER: &str = "danielrepublic";
 const GITHUB_REPOSITORY: &str = "wifimic";
@@ -24,7 +27,7 @@ pub enum VersionComparison {
 }
 
 /// Reports failures while discovering or comparing release versions.
-#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+#[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
 pub enum UpdateError {
     /// The HTTP request failed before a usable response was received.
     #[error("GitHub release request failed: {message}")]
