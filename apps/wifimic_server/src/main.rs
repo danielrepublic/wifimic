@@ -92,11 +92,7 @@ fn run_main() -> Result<(), MainError> {
             println!("{}", result.render());
             Ok(())
         }
-        Command::Upgrade { tag } => {
-            let target = tag.map_or(
-                wifimic_update::UpdateTarget::Latest,
-                wifimic_update::UpdateTarget::Tag,
-            );
+        Command::Upgrade { target } => {
             let result = wifimic_update::run_update_transaction(
                 &mut LinuxUpdateAdapter,
                 target,
