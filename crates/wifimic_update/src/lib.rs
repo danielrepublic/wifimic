@@ -1,5 +1,9 @@
 use std::time::Duration;
 
+pub mod transaction;
+
+pub use transaction::{parse_update_target, resolve_action, ResolvedAction, UpdateTarget};
+
 const GITHUB_OWNER: &str = "danielrepublic";
 const GITHUB_REPOSITORY: &str = "wifimic";
 const RELEASE_MARKER: &str = "/releases/tag/";
@@ -41,7 +45,9 @@ pub enum UpdateError {
     #[error("GitHub release response body could not be read: {message}")]
     BodyRead { message: String },
     /// The current or latest value was not a stable release version.
-    #[error("cannot determine a stable version comparison for {current:?}; use --tag explicitly")]
+    #[error(
+        "cannot determine a stable version comparison for {current:?}; use an explicit vMAJOR.MINOR.PATCH target"
+    )]
     IndeterminateVersion { current: String },
 }
 
