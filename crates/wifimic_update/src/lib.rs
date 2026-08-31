@@ -241,7 +241,10 @@ pub fn download_release_asset(tag: &str, asset: &str) -> Result<Vec<u8>, UpdateE
 /// Returns [`UpdateError::InvalidChecksumManifest`] if the manifest does not
 /// contain a valid 64-hex lowercase digest. Returns
 /// [`UpdateError::ChecksumMismatch`] if the computed digest does not match.
-pub fn verify_release_fingerprint(archive_bytes: &[u8], manifest_bytes: &[u8]) -> Result<(), UpdateError> {
+pub fn verify_release_fingerprint(
+    archive_bytes: &[u8],
+    manifest_bytes: &[u8],
+) -> Result<(), UpdateError> {
     let expected = std::str::from_utf8(manifest_bytes)
         .ok()
         .and_then(|value| value.split_whitespace().next())
@@ -257,7 +260,10 @@ pub fn verify_release_fingerprint(archive_bytes: &[u8], manifest_bytes: &[u8]) -
 
 #[cfg(test)]
 mod tests {
-    use super::{compare_versions, is_release_tag, parse_release_tag, VersionComparison, verify_release_fingerprint, UpdateError};
+    use super::{
+        compare_versions, is_release_tag, parse_release_tag, verify_release_fingerprint,
+        UpdateError, VersionComparison,
+    };
     use sha2::{Digest, Sha256};
 
     #[test]
