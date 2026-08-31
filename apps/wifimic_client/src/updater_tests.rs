@@ -1,263 +1,274 @@
-use crate::updater::{run_update, TaskSnapshot, UpdaterOutcome};
-use crate::updater_test_support::{FailurePoint, FakeUpdaterOperations};
+use std::time::Duration;
 
-const CURRENT_VERSION: &str = "v0.2.0";
+use wifimic_update::{run_update_transaction, TransactionOutcome, UpdateTarget};
+
+use crate::updater::TaskSnapshot;
+use crate::updater_test_support::{FailurePoint, FakeUpdateAdapter};
+
+const HEALTH_TIMEOUT: Duration = Duration::from_secs(45);
 const TARGET_VERSION: &str = "v0.2.0";
 
 #[test]
-fn already_up_to_date_returns_noop_and_makes_zero_calls() {
+fn explicit_current_target_returns_noop_without_adapter_operations() {
     // Given
-    let mut operations = FakeUpdaterOperations::with_failure(None);
+    let mut adapter = FakeUpdateAdapter::with_failure(None);
 
     // When
-    let result = run_update(&mut operations, CURRENT_VERSION).expect("fake update succeeds");
-
-    // Then
-    assert_eq!(result, UpdaterOutcome::NoOp);
-    assert_eq!(operations.count("backup_current_executable"), 0);
-    assert_eq!(operations.count("get_task"), 0);
-    assert_eq!(operations.count("disable_task"), 0);
-    assert_eq!(operations.count("stop_task"), 0);
-    assert_eq!(operations.count("atomic_swap_executable"), 0);
-    assert_eq!(operations.count("check_render_endpoint_enumerable"), 0);
-    assert_eq!(operations.count("wait_for_healthy"), 0);
-}
-
-#[test]
-fn clean_update_records_expected_call_sequence_and_returns_installed() {
-    // Given
-    let mut operations = FakeUpdaterOperations::with_failure(None);
-
-    // When
-    let result = run_update(&mut operations, "v0.1.0").expect("fake update succeeds");
+    let result = run_update_transaction(
+        &mut adapter,
+        UpdateTarget::Tag(TARGET_VERSION.to_owned()),
+        TARGET_VERSION,
+        HEALTH_TIMEOUT,
+    );
 
     // Then
     assert_eq!(
         result,
-        UpdaterOutcome::Installed {
+        Ok(TransactionOutcome::NoOp {
+            current: TARGET_VERSION.to_owned(),
+            latest: TARGET_VERSION.to_owned(),
+        })
+    );
+    assert!(adapter.state.calls.is_empty());
+}
+
+#[test]
+fn update_installs_and_cleans_returned_artifacts() {
+    // Given
+    let mut adapter = FakeUpdateAdapter::with_failure(None);
+
+    // When
+    let result = run_update_transaction(
+        &mut adapter,
+        UpdateTarget::Tag(TARGET_VERSION.to_owned()),
+        "v0.1.0",
+        HEALTH_TIMEOUT,
+    );
+
+    // Then
+    assert_eq!(
+        result,
+        Ok(TransactionOutcome::Installed {
             tag: TARGET_VERSION.to_owned(),
-        }
+        })
     );
     assert_eq!(
-        operations.state.calls,
-        vec![
-            "resolve_latest_tag",
-            "download_and_verify",
-            "backup_current_executable",
-            "get_task",
-            "disable_task",
-            "stop_task",
-            "atomic_swap_executable",
-            "restore_task",
-            "enable_task",
+        adapter.state.calls,
+        [
+            "stage",
+            "backup",
+            "pre_swap",
+            "swap",
+            "post_swap",
             "start_task",
-            "check_render_endpoint_enumerable",
-            "wait_for_healthy",
+            "health",
+            "cleanup_backup",
+            "cleanup_staging",
         ]
     );
 }
 
 fn assert_failure_rolls_back(failure: FailurePoint, primary_calls: &[&'static str]) {
     // Given
-    let mut operations = FakeUpdaterOperations::with_failure(Some(failure));
+    let mut adapter = FakeUpdateAdapter::with_failure(Some(failure));
 
     // When
-    let result = run_update(&mut operations, "v0.1.0").expect("rollback outcome is returned");
+    let result = run_update_transaction(
+        &mut adapter,
+        UpdateTarget::Tag(TARGET_VERSION.to_owned()),
+        "v0.1.0",
+        HEALTH_TIMEOUT,
+    );
 
     // Then
-    assert_eq!(result, UpdaterOutcome::RolledBack);
-    let mut expected_calls = vec![
-        "resolve_latest_tag",
-        "download_and_verify",
-        "backup_current_executable",
-        "get_task",
-    ];
+    assert!(matches!(result, Ok(TransactionOutcome::RolledBack { .. })));
+    let mut expected_calls = vec!["stage", "backup"];
     expected_calls.extend_from_slice(primary_calls);
+    expected_calls.push("rollback");
+    if failure == FailurePoint::PreSwap || primary_calls.contains(&"start_task") {
+        expected_calls.extend_from_slice(&["stop_task", "wait_until_stopped"]);
+    }
     expected_calls.extend_from_slice(&[
-        "stop_task",
         "restore_executable",
-        "restore_task",
-        "start_task",
+        "restart_original_task",
+        "cleanup_backup",
+        "cleanup_staging",
     ]);
-    assert_eq!(operations.state.calls, expected_calls);
+    assert_eq!(adapter.state.calls, expected_calls);
 }
 
 #[test]
-fn disable_task_failure_rolls_back_and_returns_rolled_back() {
-    assert_failure_rolls_back(FailurePoint::DisableTask, &["disable_task"]);
-}
-
-#[test]
-fn stop_task_failure_rolls_back_and_returns_rolled_back() {
-    assert_failure_rolls_back(FailurePoint::StopTask, &["disable_task", "stop_task"]);
-}
-
-#[test]
-fn swap_failure_rolls_back_and_returns_rolled_back() {
+fn pre_swap_swap_post_swap_and_health_failures_restore_known_good_state() {
+    assert_failure_rolls_back(FailurePoint::PreSwap, &["pre_swap"]);
+    assert_failure_rolls_back(FailurePoint::Swap, &["pre_swap", "swap"]);
+    assert_failure_rolls_back(FailurePoint::PostSwap, &["pre_swap", "swap", "post_swap"]);
     assert_failure_rolls_back(
-        FailurePoint::Swap,
-        &["disable_task", "stop_task", "atomic_swap_executable"],
+        FailurePoint::Health,
+        &["pre_swap", "swap", "post_swap", "start_task", "health"],
     );
 }
 
 #[test]
-fn restore_task_failure_rolls_back_and_returns_rolled_back() {
-    assert_failure_rolls_back(
-        FailurePoint::RestoreTask,
-        &[
-            "disable_task",
-            "stop_task",
-            "atomic_swap_executable",
-            "restore_task",
-        ],
-    );
-}
-
-#[test]
-fn enable_task_failure_rolls_back_and_returns_rolled_back() {
-    assert_failure_rolls_back(
-        FailurePoint::EnableTask,
-        &[
-            "disable_task",
-            "stop_task",
-            "atomic_swap_executable",
-            "restore_task",
-            "enable_task",
-        ],
-    );
-}
-
-#[test]
-fn start_task_failure_rolls_back_and_returns_rolled_back() {
-    assert_failure_rolls_back(
-        FailurePoint::StartTask,
-        &[
-            "disable_task",
-            "stop_task",
-            "atomic_swap_executable",
-            "restore_task",
-            "enable_task",
-            "start_task",
-        ],
-    );
-}
-
-#[test]
-fn health_failure_rolls_back_and_returns_rolled_back() {
+fn pre_swap_failure_with_original_task_running_stops_before_restoring_the_executable() {
     // Given
-    let mut operations = FakeUpdaterOperations::with_failure(Some(FailurePoint::Health));
+    let mut adapter = FakeUpdateAdapter::with_failure(Some(FailurePoint::PreSwap));
 
     // When
-    let result = run_update(&mut operations, "v0.1.0").expect("rollback outcome is returned");
+    let result = run_update_transaction(
+        &mut adapter,
+        UpdateTarget::Tag(TARGET_VERSION.to_owned()),
+        "v0.1.0",
+        HEALTH_TIMEOUT,
+    );
 
     // Then
-    assert_eq!(result, UpdaterOutcome::RolledBack);
-    assert_eq!(
-        operations.state.calls,
-        vec![
-            "resolve_latest_tag",
-            "download_and_verify",
-            "backup_current_executable",
-            "get_task",
-            "disable_task",
-            "stop_task",
-            "atomic_swap_executable",
-            "restore_task",
-            "enable_task",
-            "start_task",
-            "check_render_endpoint_enumerable",
-            "wait_for_healthy",
-            "stop_task",
-            "restore_executable",
-            "restore_task",
-            "start_task",
-        ]
-    );
+    assert!(matches!(result, Ok(TransactionOutcome::RolledBack { .. })));
+    assert_eq!(adapter.count("start_task"), 0);
+    assert_eq!(adapter.count("stop_task"), 1);
+    let stop = adapter
+        .state
+        .calls
+        .iter()
+        .position(|call| *call == "stop_task");
+    let stopped = adapter
+        .state
+        .calls
+        .iter()
+        .position(|call| *call == "wait_until_stopped");
+    let restore = adapter
+        .state
+        .calls
+        .iter()
+        .position(|call| *call == "restore_executable");
+    assert!(stop.is_some_and(|stop| {
+        stopped.is_some_and(|stopped| {
+            restore.is_some_and(|restore| stop < stopped && stopped < restore)
+        })
+    }));
 }
 
 #[test]
-fn endpoint_check_failure_rolls_back_and_returns_rolled_back() {
+fn enabled_idle_task_starts_before_the_health_check() {
     // Given
-    let mut operations = FakeUpdaterOperations::with_failure(Some(FailurePoint::EndpointCheck));
+    let mut adapter = FakeUpdateAdapter::with_failure(None);
+    adapter.state.current_task = TaskSnapshot::new("<Task/>".to_owned(), true, false);
+    adapter.state.task_running = false;
 
     // When
-    let result = run_update(&mut operations, "v0.1.0").expect("rollback outcome is returned");
+    let result = run_update_transaction(
+        &mut adapter,
+        UpdateTarget::Tag(TARGET_VERSION.to_owned()),
+        "v0.1.0",
+        HEALTH_TIMEOUT,
+    );
 
     // Then
-    assert_eq!(result, UpdaterOutcome::RolledBack);
-    assert_eq!(
-        operations.state.calls,
-        vec![
-            "resolve_latest_tag",
-            "download_and_verify",
-            "backup_current_executable",
-            "get_task",
-            "disable_task",
-            "stop_task",
-            "atomic_swap_executable",
-            "restore_task",
-            "enable_task",
-            "start_task",
-            "check_render_endpoint_enumerable",
-            "stop_task",
-            "restore_executable",
-            "restore_task",
-            "start_task",
-        ]
-    );
+    assert!(matches!(result, Ok(TransactionOutcome::Installed { .. })));
+    let start = adapter
+        .state
+        .calls
+        .iter()
+        .position(|call| *call == "start_task");
+    let health = adapter
+        .state
+        .calls
+        .iter()
+        .position(|call| *call == "health");
+    assert!(start.is_some_and(|start| health.is_some_and(|health| start < health)));
+    assert!(adapter.state.task_running);
 }
 
 #[test]
-fn rollback_verification_failure_returns_distinct_outcome() {
+fn enabled_idle_task_that_never_runs_rolls_back_the_attempted_start() {
     // Given
-    let mut operations = FakeUpdaterOperations::with_failure(Some(FailurePoint::Swap));
-    operations.state.fail_restore_executable = true;
+    let mut adapter = FakeUpdateAdapter::with_failure(Some(FailurePoint::TaskDoesNotReachRunning));
+    let prior_task = TaskSnapshot::new("<Task><Idle/></Task>".to_owned(), true, false);
+    let prior_executable = adapter.state.current_executable.clone();
+    adapter.state.current_task = prior_task.clone();
+    adapter.state.task_running = false;
 
     // When
-    let result = run_update(&mut operations, "v0.1.0").expect("rollback outcome is returned");
+    let result = run_update_transaction(
+        &mut adapter,
+        UpdateTarget::Tag(TARGET_VERSION.to_owned()),
+        "v0.1.0",
+        HEALTH_TIMEOUT,
+    );
 
     // Then
-    assert_eq!(result, UpdaterOutcome::RollbackVerificationFailed);
-    assert_eq!(operations.count("restore_executable"), 1);
-    assert_eq!(operations.count("restore_task"), 1);
-    assert_eq!(operations.count("start_task"), 1);
+    assert!(matches!(
+        result,
+        Ok(TransactionOutcome::RolledBack { cause })
+            if matches!(*cause, wifimic_update::TransactionError::HealthCheck { .. })
+    ));
+    assert_eq!(adapter.count("start_task"), 1);
+    assert_eq!(adapter.count("stop_task"), 0);
+    assert_eq!(adapter.state.current_task, prior_task);
+    assert_eq!(adapter.state.current_executable, prior_executable);
+    assert!(!adapter.state.task_running);
 }
 
 #[test]
-fn rollback_restores_exact_prior_task_snapshot() {
+fn rollback_does_not_stop_an_original_task_before_the_update_starts_one() {
     // Given
-    let mut operations = FakeUpdaterOperations::with_failure(Some(FailurePoint::RestoreTask));
+    let mut adapter = FakeUpdateAdapter::with_failure(Some(FailurePoint::Swap));
+
+    // When
+    let result = run_update_transaction(
+        &mut adapter,
+        UpdateTarget::Tag(TARGET_VERSION.to_owned()),
+        "v0.1.0",
+        HEALTH_TIMEOUT,
+    );
+
+    // Then
+    assert!(matches!(result, Ok(TransactionOutcome::RolledBack { .. })));
+    assert_eq!(adapter.count("stop_task"), 0);
+    assert_eq!(adapter.count("restart_original_task"), 1);
+}
+
+#[test]
+fn rollback_verification_failure_retains_backup_and_cleans_staging() {
+    // Given
+    let mut adapter = FakeUpdateAdapter::with_failure(Some(FailurePoint::Swap));
+    adapter.state.fail_restore = true;
+
+    // When
+    let result = run_update_transaction(
+        &mut adapter,
+        UpdateTarget::Tag(TARGET_VERSION.to_owned()),
+        "v0.1.0",
+        HEALTH_TIMEOUT,
+    );
+
+    // Then
+    assert!(matches!(
+        result,
+        Ok(TransactionOutcome::RollbackVerificationFailed { .. })
+    ));
+    assert_eq!(adapter.count("cleanup_backup"), 0);
+    assert_eq!(adapter.count("cleanup_staging"), 1);
+}
+
+#[test]
+fn rollback_restores_exact_prior_task_snapshot_and_executable() {
+    // Given
+    let mut adapter = FakeUpdateAdapter::with_failure(Some(FailurePoint::PostSwap));
     let prior_task =
         TaskSnapshot::new("<Task><Custom>prior</Custom></Task>".to_owned(), true, true);
-    let prior_executable = operations.state.current_executable.clone();
-    operations.state.current_task = prior_task.clone();
+    let prior_executable = adapter.state.current_executable.clone();
+    adapter.state.current_task = prior_task.clone();
 
     // When
-    let result = run_update(&mut operations, "v0.1.0").expect("rollback outcome is returned");
-
-    // Then
-    assert_eq!(result, UpdaterOutcome::RolledBack);
-    assert_eq!(operations.state.current_task, prior_task);
-    assert_eq!(operations.state.current_executable, prior_executable);
-    assert_eq!(operations.count("start_task"), 1);
-}
-
-#[test]
-fn rollback_does_not_restart_a_task_that_was_not_running() {
-    // Given
-    let mut operations = FakeUpdaterOperations::with_failure(Some(FailurePoint::Swap));
-    let prior_task = TaskSnapshot::new(
-        "<Task><Custom>stopped</Custom></Task>".to_owned(),
-        false,
-        false,
+    let result = run_update_transaction(
+        &mut adapter,
+        UpdateTarget::Tag(TARGET_VERSION.to_owned()),
+        "v0.1.0",
+        HEALTH_TIMEOUT,
     );
-    operations.state.current_task = prior_task.clone();
-
-    // When
-    let result = run_update(&mut operations, "v0.1.0").expect("rollback outcome is returned");
 
     // Then
-    assert_eq!(result, UpdaterOutcome::RolledBack);
-    assert_eq!(operations.state.current_task, prior_task);
-    assert_eq!(operations.count("start_task"), 0);
+    assert!(matches!(result, Ok(TransactionOutcome::RolledBack { .. })));
+    assert_eq!(adapter.state.current_task, prior_task);
+    assert_eq!(adapter.state.current_executable, prior_executable);
 }
