@@ -16,6 +16,20 @@ irm https://github.com/danielrepublic/wifimic/releases/latest/download/install-w
 
 The installer verifies the release zip SHA-256, installs `wifimic_client.exe` to `C:\Program Files\wifimic-client`, registers the interactive logon task, and scopes the UDP 6902 firewall rule to the Linux peer.
 
+#### Manual updates
+
+An already-installed client can check for and apply updates from any PowerShell or Command Prompt window (no Administrator required for the check; `upgrade` will prompt for UAC elevation):
+
+| Command | Effect |
+|---------|--------|
+| `wifimic_client update` | Queries GitHub and reports whether a newer release is available. Does not install anything. |
+| `wifimic_client upgrade` | Downloads, verifies, and installs the latest release. |
+| `wifimic_client upgrade vX.Y.Z` | Downloads and installs a specific release tag. |
+| `wifimic_client status` | Reports the installed version and scheduled-task state. |
+| `wifimic_client doctor` | Runs a one-shot host self-check (VB-CABLE endpoint, network reachability). |
+
+Running `upgrade` launches a short-lived UAC-elevated handoff script that replaces the binary while the normal audio client exits. Once the script completes, the logon task starts the new client automatically. There are no automatic or background updates. For the full upgrade flow and troubleshooting, see [docs/deployment.md](docs/deployment.md).
+
 ### Linux server
 
 Run:
@@ -33,7 +47,7 @@ To install a specific release rather than the latest, download the release insta
 An already-installed server can check for and apply updates without re-running the install one-liner:
 
 - `wifimic_server update` — queries GitHub for a newer release (reports only, does not install)
-- `wifimic_server upgrade [--tag vX.Y.Z]` — downloads, verifies, and installs a release with automatic rollback on failure
+- `wifimic_server upgrade [latest|vX.Y.Z]` — downloads, verifies, and installs a release with automatic rollback on failure
 
 These are manual, one-shot commands invoked by the user — not an automatic background update mechanism.
 
