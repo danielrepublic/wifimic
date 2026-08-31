@@ -8,4 +8,89 @@ param(
     [string]$ClientExecutable
 )
 
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+# The parent has exited long before this deadline in the normal handoff path.
+$script:ParentExitTimeout = [TimeSpan]::FromSeconds(120)
+$script:TaskPath = '\wifimic\'
+$script:TaskName = 'wifimic-client'
+$runnerPath = Join-Path ([System.IO.Path]::GetTempPath()) ("wifimic-client-upgrade-runner-{0}.exe" -f [Guid]::NewGuid().ToString('N'))
+$exitCode = 0
+
+try {
+    $deadline = [DateTime]::UtcNow.Add($script:ParentExitTimeout)
+    while ($null -ne (Get-Process -Id $ParentProcessId -ErrorAction SilentlyContinue)) {
+        if ([DateTime]::UtcNow -ge $deadline) {
+            [Console]::Error.WriteLine("wifimic update handoff timed out waiting for parent process $ParentProcessId to exit.")
+            $exitCode = 10
+            break
+        }
+        Start-Sleep -Milliseconds 250
+    }
+}
+catch {
+    [Console]::Error.WriteLine("wifimic update handoff could not wait for parent process ${ParentProcessId}: $($_.Exception.Message)")
+    $exitCode = 11
+}
+
+if ($exitCode -eq 0) {
+    try {
+        Copy-Item -LiteralPath $ClientExecutable -Destination $runnerPath -Force
+    }
+    catch {
+        [Console]::Error.WriteLine("wifimic update handoff could not create temporary runner '$runnerPath': $($_.Exception.Message)")
+        $exitCode = 20
+    }
+}
+
+if ($exitCode -eq 0) {
+    try {
+        & $runnerPath --internal-apply-upgrade $ReleaseTag
+        if ($LASTEXITCODE -ne 0) {
+            [Console]::Error.WriteLine("wifimic update transaction failed with exit code $LASTEXITCODE.")
+            $exitCode = 30
+        }
+    }
+    catch {
+        [Console]::Error.WriteLine("wifimic update handoff could not run temporary runner '$runnerPath': $($_.Exception.Message)")
+        $exitCode = 31
+    }
+}
+
+if ($exitCode -eq 0) {
+    try {
+        $task = Get-ScheduledTask -TaskName 'wifimic-client' -TaskPath '\wifimic\' -ErrorAction Stop
+        if ($task.Settings.Enabled -and $task.State -ne 'Running') {
+            Start-ScheduledTask -TaskName 'wifimic-client' -TaskPath '\wifimic\' -ErrorAction Stop
+        }
+    }
+    catch {
+        [Console]::Error.WriteLine("wifimic update handoff could not restart scheduled task '$($script:TaskPath)$($script:TaskName)': $($_.Exception.Message)")
+        $exitCode = 40
+    }
+}
+
+try {
+    if (Test-Path -LiteralPath $runnerPath -PathType Leaf) {
+        Remove-Item -LiteralPath $runnerPath -Force -ErrorAction Stop
+    }
+}
+catch {
+    [Console]::Error.WriteLine("wifimic update handoff could not remove temporary runner '$runnerPath': $($_.Exception.Message)")
+    if ($exitCode -eq 0) {
+        $exitCode = 50
+    }
+}
+
+try {
+    Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction Stop
+}
+catch {
+    [Console]::Error.WriteLine("wifimic update handoff could not remove itself '$PSCommandPath': $($_.Exception.Message)")
+    if ($exitCode -eq 0) {
+        $exitCode = 60
+    }
+}
+
+exit $exitCode
