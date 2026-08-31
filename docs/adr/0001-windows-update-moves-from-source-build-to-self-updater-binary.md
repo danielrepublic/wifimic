@@ -1,16 +1,24 @@
-# Windows update moves from a source-build PowerShell script to a self-updater binary
+# Windows update moves from a self-updater binary to a client command with a transient handoff script
 
 **Status**: accepted
 
-Until v0.2.0, updating an installed Windows client required a PowerShell updater script, which needed a full dev environment on the target machine (`git`, `cargo`, a clean source checkout) to rebuild `wifimic_client.exe` from source before swapping it in — effectively a developer-machine-only update path, unlike the Linux `wifimic_server upgrade` command, which downloads a prebuilt, checksum-verified GitHub release binary with no toolchain required.
+Until v0.2.0, updating an installed Windows client required a PowerShell updater script, which needed a full development environment on the target machine (`git`, `cargo`, and a clean source checkout) to rebuild `wifimic_client.exe` from source before swapping it in. v0.2.0 replaced that developer-only path with `wifimic_client_updater.exe`, a separate installed executable that could replace the client while it was stopped.
 
-v0.2.0 replaces this with `wifimic_client_updater.exe`, a standalone executable installed alongside `wifimic_client.exe` that a user double-clicks to check GitHub for the latest release and install it — mirroring the Linux binary-download model instead of the source-build model. It exists as a separate process because a running executable cannot atomically replace its own file. It carries an embedded UAC manifest (elevation is required to touch the `\wifimic\wifimic-client` Scheduled Task and `C:\Program Files\wifimic-client\`), supports only the latest public release (no `--tag`, unlike `wifimic_server upgrade`), and follows the same stop → atomic-swap → restore → start → health-check rollback contract as both the prior script and the Linux upgrade path.
+The self-updater binary is now retired. Windows instead installs `wifimic_client` onto the system PATH and gives it the same one-shot command interface as Linux: `update`, `upgrade [latest|vX.Y.Z]`, `status`, and `doctor`. `update` is non-mutating; `upgrade` is the explicit installation action and supports both `latest` and an explicit version, including deliberate downgrade.
 
-The old PowerShell updater script is deleted outright rather than kept alongside the new binary — no test suite referenced it, and keeping two update mechanisms for the same install would invite drift. `docs/release-process.md` and `docs/deployment.md` must be updated to verify deployments via `wifimic_client_updater.exe` instead of the script; because the updater only installs "latest," the mandatory per-release Windows verification step can no longer pin an exact tag the way the Linux `upgrade --tag` step still can.
+Windows cannot reliably replace a running executable. Therefore `wifimic_client upgrade` generates an embedded, short-lived PowerShell handoff script, starts it elevated through UAC, and exits. The script waits for the client process to end, performs the verified transaction, restarts the scheduled client task, health-checks it, and deletes itself. It is not a persistent update executable. A failure before backup makes no mutation; a later failure rolls back the client and task state. The GitHub Release `latest/download` installer remains the first-installation and repair-installation path; it removes any legacy `wifimic_client_updater.exe`.
 
-On the Linux side, the existing `wifimic_server check-update` command is renamed to `wifimic_server update` in the same release, to match the CLI verb the v0.2.0 spec used loosely; its behavior (check only, no download) is unchanged. `wifimic_server upgrade` (the actual download-and-install command) keeps its name.
+Both platforms resolve an explicit Update Target the same way: no target or `latest` selects the latest public release, while `vX.Y.Z` selects that published release. `latest` is authoritative even if it is older than the installed version; equal targets are no-ops. The shared transaction and rollback logic belongs in `wifimic_update`; Windows and Linux provide their platform-specific adapters.
+
+## Consequences
+
+- Windows and Linux documentation and release verification use the same command vocabulary.
+- The Windows release archive and repair installer no longer ship or preserve the legacy Updater.
+- The transient handoff script is generated from an embedded template; it is not fetched as executable code from GitHub. The Release artifacts it installs remain SHA-256 verified.
+- The primary shared tests exercise `wifimic_update` through fake adapters. Windows and Linux retain focused tests for their platform-specific adapters.
 
 ## Considered Options
 
-- **Keep the PowerShell script for CI/dev use, ship the exe for end users.** Rejected: no test suite depends on the script today, and running two Windows update mechanisms for the same install surface was judged more likely to drift out of sync than to provide real value.
-- **Give the Windows updater a `--tag` flag to match `wifimic_server upgrade`.** Rejected for v0.2.0 to keep the double-click UX simple; this means the release-process.md Windows verification step can only assert against "latest," not a specific just-published tag.
+- **Keep `wifimic_client_updater.exe`.** Rejected: it gives Windows a different command surface and creates a second persistent executable with its own self-update problem.
+- **Install a permanent third bootstrapper.** Rejected: it adds another persistent program that would eventually require self-update.
+- **Fetch a transient handoff script from GitHub at update time.** Rejected: the embedded template avoids introducing a second remote-code acquisition path; only the verified Release artifacts are downloaded.
