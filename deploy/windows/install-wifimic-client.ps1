@@ -8,8 +8,10 @@ param(
     [switch]$AcceptHostMutation,
     [string]$TestStateRoot,
     [string[]]$FakeRenderEndpoints = @('CABLE Input (VB-Audio Virtual Cable)'),
-    [ValidateSet('BeforeTask', 'AfterExecutableCopy', 'AfterTask', 'BeforeFirewall', 'AfterFirewall', 'BeforeVerification')]
-    [string]$FailurePoint
+    [ValidateSet('BeforeTask', 'AfterExecutableCopy', 'AfterTask', 'BeforeFirewall', 'AfterFirewall', 'AfterLegacyUpdaterRemoval', 'BeforeVerification')]
+    [string]$FailurePoint,
+    [string]$FakeMachinePath = '',
+    [string]$FakeLegacyUpdaterContent
 )
 
 Set-StrictMode -Version Latest
@@ -17,7 +19,6 @@ $ErrorActionPreference = 'Stop'
 
 $script:CanonicalInstallRoot = 'C:\Program Files\wifimic-client'
 $script:CanonicalExecutableName = 'wifimic_client.exe'
-$script:CanonicalUpdaterExecutableName = 'wifimic_client_updater.exe'
 $script:CanonicalTaskFolder = '\wifimic\'
 $script:CanonicalTaskName = 'wifimic-client'
 $script:CanonicalTaskPath = '\wifimic\wifimic-client'
@@ -85,8 +86,6 @@ function Get-WifimicIdentity {
         InstallRoot = $script:CanonicalInstallRoot
         ExecutableName = $script:CanonicalExecutableName
         ExecutablePath = Join-Path $script:CanonicalInstallRoot $script:CanonicalExecutableName
-        UpdaterExecutableName = $script:CanonicalUpdaterExecutableName
-        UpdaterExecutablePath = Join-Path $script:CanonicalInstallRoot $script:CanonicalUpdaterExecutableName
         TaskFolder = $script:CanonicalTaskFolder
         TaskName = $script:CanonicalTaskName
         TaskPath = $script:CanonicalTaskPath
@@ -98,6 +97,7 @@ function Get-WifimicIdentity {
         Description = 'Interactive wifimic client.'
         MarkerFileName = $script:CanonicalMarkerFileName
         MarkerFilePath = Join-Path $script:CanonicalInstallRoot $script:CanonicalMarkerFileName
+        LegacyUpdaterPath = Join-Path $script:CanonicalInstallRoot 'wifimic_client_updater.exe'
     }
 }
 
@@ -364,6 +364,36 @@ function Test-WifimicFileCaptureEqual {
     return $true
 }
 
+function Get-WifimicMachinePathPlan {
+    [CmdletBinding()]
+    param(
+        [AllowNull()][string]$MachinePath,
+        [Parameter(Mandatory = $true)][string]$InstallRoot
+    )
+
+    $canonicalKey = $InstallRoot.TrimEnd('\', '/')
+    $segments = if ($null -eq $MachinePath) { @() } else { @($MachinePath.Split(';')) }
+    $canonicalFound = $false
+    $result = [System.Collections.Generic.List[string]]::new()
+    foreach ($segment in $segments) {
+        $segmentKey = $segment.TrimEnd('\', '/')
+        if ([string]::Equals($segmentKey, $canonicalKey, [System.StringComparison]::OrdinalIgnoreCase)) {
+            if ($canonicalFound) { continue }
+            $canonicalFound = $true
+        }
+        [void]$result.Add($segment)
+    }
+    if (-not $canonicalFound) {
+        [void]$result.Add($InstallRoot)
+    }
+
+    $updatedPath = $result -join ';'
+    return [pscustomobject]@{
+        Path = $updatedPath
+        Changed = -not [string]::Equals($MachinePath, $updatedPath, [System.StringComparison]::Ordinal)
+    }
+}
+
 function Assert-WifimicPreexistingState {
     [CmdletBinding()]
     param(
@@ -406,13 +436,15 @@ function Restore-WifimicTransaction {
         [pscustomobject]$PriorTask,
         [pscustomobject]$PriorFirewall,
         [pscustomobject]$PriorExecutable,
-        [pscustomobject]$PriorUpdater,
         [pscustomobject]$PriorMarker,
+        [pscustomobject]$PriorLegacyUpdater,
+        [AllowNull()][string]$PriorMachinePath,
         [bool]$TaskChanged,
         [bool]$FirewallChanged,
         [bool]$ExecutableChanged,
-        [bool]$UpdaterChanged,
         [bool]$MarkerChanged,
+        [bool]$LegacyUpdaterChanged,
+        [bool]$MachinePathChanged,
         [bool]$InstallRootCreated
     )
 
@@ -450,14 +482,6 @@ function Restore-WifimicTransaction {
                 Invoke-WifimicOperation -Operations $Operations -Name 'RestoreFile' -Arguments @($Identity.ExecutablePath, $PriorExecutable.Bytes) | Out-Null
             }
         }
-        if ($UpdaterChanged) {
-            if ($null -eq $PriorUpdater) {
-                Invoke-WifimicOperation -Operations $Operations -Name 'RemoveFile' -Arguments @($Identity.UpdaterExecutablePath) | Out-Null
-            }
-            else {
-                Invoke-WifimicOperation -Operations $Operations -Name 'RestoreFile' -Arguments @($Identity.UpdaterExecutablePath, $PriorUpdater.Bytes) | Out-Null
-            }
-        }
         if ($InstallRootCreated) {
             Invoke-WifimicOperation -Operations $Operations -Name 'RemoveDirectoryIfEmpty' -Arguments @($Identity.InstallRoot) | Out-Null
         }
@@ -475,6 +499,26 @@ function Restore-WifimicTransaction {
         }
     }
     catch { [void]$errors.Add("marker: $($_.Exception.Message)") }
+
+    try {
+        if ($LegacyUpdaterChanged) {
+            if ($null -eq $PriorLegacyUpdater) {
+                Invoke-WifimicOperation -Operations $Operations -Name 'RemoveFile' -Arguments @($Identity.LegacyUpdaterPath) | Out-Null
+            }
+            else {
+                Invoke-WifimicOperation -Operations $Operations -Name 'RestoreFile' -Arguments @($Identity.LegacyUpdaterPath, $PriorLegacyUpdater.Bytes) | Out-Null
+            }
+        }
+    }
+    catch { [void]$errors.Add("legacy updater: $($_.Exception.Message)") }
+
+    try {
+        if ($MachinePathChanged) {
+            Invoke-WifimicOperation -Operations $Operations -Name 'SetMachinePath' -Arguments @($PriorMachinePath) | Out-Null
+            Invoke-WifimicOperation -Operations $Operations -Name 'BroadcastEnvironmentChange' | Out-Null
+        }
+    }
+    catch { [void]$errors.Add("machine PATH: $($_.Exception.Message)") }
 
     try {
         $currentTask = Invoke-WifimicOperation -Operations $Operations -Name 'GetTask' -Arguments @($Identity)
@@ -499,14 +543,19 @@ function Restore-WifimicTransaction {
             Throw-WifimicInstallerError -Code 'RollbackVerification' -Message 'The prior executable was not restored exactly.'
         }
 
-        $currentUpdater = Invoke-WifimicOperation -Operations $Operations -Name 'CaptureFile' -Arguments @($Identity.UpdaterExecutablePath)
-        if (-not (Test-WifimicFileCaptureEqual -Actual $currentUpdater -Expected $PriorUpdater)) {
-            Throw-WifimicInstallerError -Code 'RollbackVerification' -Message 'The prior updater executable was not restored exactly.'
-        }
-
         $currentMarker = Invoke-WifimicOperation -Operations $Operations -Name 'CaptureFile' -Arguments @($Identity.MarkerFilePath)
         if (-not (Test-WifimicFileCaptureEqual -Actual $currentMarker -Expected $PriorMarker)) {
             Throw-WifimicInstallerError -Code 'RollbackVerification' -Message 'The prior marker file was not restored exactly.'
+        }
+
+        $currentLegacyUpdater = Invoke-WifimicOperation -Operations $Operations -Name 'CaptureFile' -Arguments @($Identity.LegacyUpdaterPath)
+        if (-not (Test-WifimicFileCaptureEqual -Actual $currentLegacyUpdater -Expected $PriorLegacyUpdater)) {
+            Throw-WifimicInstallerError -Code 'RollbackVerification' -Message 'The prior legacy updater was not restored exactly.'
+        }
+
+        $currentMachinePath = Invoke-WifimicOperation -Operations $Operations -Name 'GetMachinePath'
+        if (-not [string]::Equals($currentMachinePath, $PriorMachinePath, [System.StringComparison]::Ordinal)) {
+            Throw-WifimicInstallerError -Code 'RollbackVerification' -Message 'The prior machine PATH was not restored exactly.'
         }
     }
     catch { [void]$errors.Add("verification: $($_.Exception.Message)") }
@@ -529,21 +578,19 @@ function Invoke-WifimicInstall {
 
     $identity = Get-WifimicIdentity -Endpoint $RenderEndpoint
     $source = Resolve-WifimicClientExecutable -Path $ClientExecutable
-    $updaterSource = Join-Path (Split-Path -Parent $source) $script:CanonicalUpdaterExecutableName
-    if (-not (Test-Path -LiteralPath $updaterSource -PathType Leaf)) {
-        Throw-WifimicInstallerError -Code 'MissingUpdater' -Message "Updater executable was not found: '$updaterSource'."
-    }
     $firewall = New-WifimicFirewallSignature -Identity $identity
     $priorTask = $null
     $priorFirewall = $null
     $priorExecutable = $null
-    $priorUpdater = $null
     $priorMarker = $null
+    $priorLegacyUpdater = $null
+    $priorMachinePath = $null
     $taskChanged = $false
     $firewallChanged = $false
     $executableChanged = $false
-    $updaterChanged = $false
     $markerChanged = $false
+    $legacyUpdaterChanged = $false
+    $machinePathChanged = $false
     $installRootCreated = $false
     $stageRoot = $null
 
@@ -551,8 +598,10 @@ function Invoke-WifimicInstall {
         $priorTask = Invoke-WifimicOperation -Operations $Operations -Name 'GetTask' -Arguments @($identity)
         $priorFirewall = Invoke-WifimicOperation -Operations $Operations -Name 'GetFirewall' -Arguments @($identity)
         $priorExecutable = Invoke-WifimicOperation -Operations $Operations -Name 'CaptureFile' -Arguments @($identity.ExecutablePath)
-        $priorUpdater = Invoke-WifimicOperation -Operations $Operations -Name 'CaptureFile' -Arguments @($identity.UpdaterExecutablePath)
         $priorMarker = Invoke-WifimicOperation -Operations $Operations -Name 'CaptureFile' -Arguments @($identity.MarkerFilePath)
+        $priorLegacyUpdater = Invoke-WifimicOperation -Operations $Operations -Name 'CaptureFile' -Arguments @($identity.LegacyUpdaterPath)
+        $priorMachinePath = Invoke-WifimicOperation -Operations $Operations -Name 'GetMachinePath'
+        $machinePathPlan = Get-WifimicMachinePathPlan -MachinePath $priorMachinePath -InstallRoot $identity.InstallRoot
         Assert-WifimicPreexistingState -Task $priorTask -Firewall $priorFirewall -Executable $priorExecutable -Identity $identity -ExpectedFirewall $firewall
 
         $endpointNames = @(Invoke-WifimicOperation -Operations $Operations -Name 'GetRenderEndpointNames')
@@ -574,6 +623,9 @@ function Invoke-WifimicInstall {
                 Endpoint = $identity.Endpoint
                 LogonTrigger = 'LogonTrigger'
                 LogonType = 'InteractiveToken'
+                MachinePathWouldChange = $machinePathPlan.Changed
+                MachinePath = $machinePathPlan.Path
+                LegacyUpdaterWouldBeRemoved = $null -ne $priorLegacyUpdater
             }
         }
 
@@ -592,9 +644,6 @@ function Invoke-WifimicInstall {
         Invoke-WifimicOperation -Operations $Operations -Name 'CopyFile' -Arguments @((Join-Path $stageRoot $identity.ExecutableName), $identity.ExecutablePath) | Out-Null
         $executableChanged = $true
         Invoke-WifimicFailurePoint -Requested $FailurePoint -Point 'AfterExecutableCopy'
-        Invoke-WifimicOperation -Operations $Operations -Name 'CopyFile' -Arguments @($updaterSource, (Join-Path $stageRoot $identity.UpdaterExecutableName)) | Out-Null
-        Invoke-WifimicOperation -Operations $Operations -Name 'CopyFile' -Arguments @((Join-Path $stageRoot $identity.UpdaterExecutableName), $identity.UpdaterExecutablePath) | Out-Null
-        $updaterChanged = $true
 
         $markerSource = Join-Path (Split-Path -Parent $source) $identity.MarkerFileName
         if (Test-Path -LiteralPath $markerSource -PathType Leaf) {
@@ -621,6 +670,18 @@ function Invoke-WifimicInstall {
             Throw-WifimicInstallerError -Code 'FirewallContractMismatch' -Message 'The installed firewall rule did not match the exact peer-scoped UDP contract.'
         }
         Invoke-WifimicFailurePoint -Requested $FailurePoint -Point 'AfterFirewall'
+
+        if ($machinePathPlan.Changed) {
+            Invoke-WifimicOperation -Operations $Operations -Name 'SetMachinePath' -Arguments @($machinePathPlan.Path) | Out-Null
+            $machinePathChanged = $true
+            Invoke-WifimicOperation -Operations $Operations -Name 'BroadcastEnvironmentChange' | Out-Null
+        }
+
+        if ($null -ne $priorLegacyUpdater) {
+            Invoke-WifimicOperation -Operations $Operations -Name 'RemoveFile' -Arguments @($identity.LegacyUpdaterPath) | Out-Null
+            $legacyUpdaterChanged = $true
+        }
+        Invoke-WifimicFailurePoint -Requested $FailurePoint -Point 'AfterLegacyUpdaterRemoval'
         Invoke-WifimicFailurePoint -Requested $FailurePoint -Point 'BeforeVerification'
 
         [pscustomobject]@{
@@ -639,13 +700,16 @@ function Invoke-WifimicInstall {
             Endpoint = $identity.Endpoint
             LogonTrigger = 'LogonTrigger'
             LogonType = 'InteractiveToken'
+            MachinePathChanged = $machinePathPlan.Changed
+            MachinePath = $machinePathPlan.Path
+            LegacyUpdaterRemoved = $legacyUpdaterChanged
         }
     }
     catch {
         $failureRecord = $_
         $failure = $_.Exception
         try {
-            Restore-WifimicTransaction -Operations $Operations -Identity $identity -PriorTask $priorTask -PriorFirewall $priorFirewall -PriorExecutable $priorExecutable -PriorUpdater $priorUpdater -PriorMarker $priorMarker -TaskChanged $taskChanged -FirewallChanged $firewallChanged -ExecutableChanged $executableChanged -UpdaterChanged $updaterChanged -MarkerChanged $markerChanged -InstallRootCreated $installRootCreated
+            Restore-WifimicTransaction -Operations $Operations -Identity $identity -PriorTask $priorTask -PriorFirewall $priorFirewall -PriorExecutable $priorExecutable -PriorMarker $priorMarker -PriorLegacyUpdater $priorLegacyUpdater -PriorMachinePath $priorMachinePath -TaskChanged $taskChanged -FirewallChanged $firewallChanged -ExecutableChanged $executableChanged -MarkerChanged $markerChanged -LegacyUpdaterChanged $legacyUpdaterChanged -MachinePathChanged $machinePathChanged -InstallRootCreated $installRootCreated
         }
         catch {
             throw (New-WifimicInstallerException -Code 'RollbackFailed' -Message "Install failed with '$($failure.Message)' at '$($failureRecord.ScriptStackTrace)' and rollback failed with '$($_.Exception.Message)' at '$($_.ScriptStackTrace)'." -InnerException $failure)
@@ -681,6 +745,35 @@ function New-WifimicNativeOperations {
             }
         }
         finally { Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue }
+    }.GetNewClosure()
+    $broadcastEnvironmentChange = {
+        if ($null -eq ('WifimicInstaller.EnvironmentChange' -as [type])) {
+            Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+namespace WifimicInstaller {
+    public static class EnvironmentChange {
+        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        public static extern IntPtr SendMessageTimeout(
+            IntPtr hWnd,
+            uint message,
+            IntPtr wParam,
+            string lParam,
+            uint flags,
+            uint timeout,
+            out IntPtr result);
+    }
+}
+'@
+        }
+
+        $result = [IntPtr]::Zero
+        $sent = [WifimicInstaller.EnvironmentChange]::SendMessageTimeout([IntPtr]0xffff, 0x001A, [IntPtr]::Zero, 'Environment', 0x0002, 5000, [ref]$result)
+        if ($sent -eq [IntPtr]::Zero) {
+            $errorCode = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+            throw "Broadcasting the machine environment change failed: $([ComponentModel.Win32Exception]::new($errorCode).Message)"
+        }
     }.GetNewClosure()
 
     [pscustomobject]@{
@@ -739,6 +832,12 @@ function New-WifimicNativeOperations {
         GetRenderEndpointNames = {
             @(Get-PnpDevice -Class AudioEndpoint -Status OK -ErrorAction Stop | ForEach-Object { [string]$_.FriendlyName })
         }
+        GetMachinePath = { [Environment]::GetEnvironmentVariable('Path', [EnvironmentVariableTarget]::Machine) }
+        SetMachinePath = {
+            param($path)
+            [Environment]::SetEnvironmentVariable('Path', $path, [EnvironmentVariableTarget]::Machine)
+        }
+        BroadcastEnvironmentChange = $broadcastEnvironmentChange
         DirectoryExists = { param($path) Test-Path -LiteralPath $path -PathType Container }
         EnsureDirectory = { param($path) New-Item -ItemType Directory -Path $path -Force | Out-Null }
         CopyFile = { param($source, $destination) Copy-Item -LiteralPath $source -Destination $destination -Force }
@@ -773,7 +872,9 @@ function New-WifimicFakeOperations {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)][string]$StateRoot,
-        [Parameter(Mandatory = $true)][string[]]$EndpointNames
+        [Parameter(Mandatory = $true)][string[]]$EndpointNames,
+        [AllowNull()][string]$MachinePath,
+        [AllowNull()][string]$LegacyUpdaterContent
     )
 
     $stateInstallRoot = Join-Path $StateRoot 'install'
@@ -782,6 +883,8 @@ function New-WifimicFakeOperations {
     $state = [pscustomobject]@{
         Task = $null
         Firewall = $null
+        MachinePath = $MachinePath
+        InitialLegacyUpdaterBase64 = $null
         Events = [System.Collections.ArrayList]::new()
     }
     $mapPath = {
@@ -799,6 +902,12 @@ function New-WifimicFakeOperations {
         param($name)
         [void]$state.Events.Add($name)
     }.GetNewClosure()
+    if ($null -ne $LegacyUpdaterContent) {
+        New-Item -ItemType Directory -Path $stateInstallRoot -Force | Out-Null
+        $legacyUpdaterBytes = [System.Text.Encoding]::UTF8.GetBytes($LegacyUpdaterContent)
+        [System.IO.File]::WriteAllBytes((Join-Path $stateInstallRoot 'wifimic_client_updater.exe'), $legacyUpdaterBytes)
+        $state.InitialLegacyUpdaterBase64 = [Convert]::ToBase64String($legacyUpdaterBytes)
+    }
 
     return [pscustomobject]@{
         GetTask = { param($identity) & $record 'GetTask'; return $state.Task }.GetNewClosure()
@@ -831,6 +940,9 @@ function New-WifimicFakeOperations {
         }.GetNewClosure()
         RemoveFirewall = { param($identity) & $record 'RemoveFirewall'; $state.Firewall = $null }.GetNewClosure()
         GetRenderEndpointNames = { & $record 'GetRenderEndpointNames'; return $EndpointNames }.GetNewClosure()
+        GetMachinePath = { & $record 'GetMachinePath'; return $state.MachinePath }.GetNewClosure()
+        SetMachinePath = { param($path) & $record 'SetMachinePath'; $state.MachinePath = $path }.GetNewClosure()
+        BroadcastEnvironmentChange = { & $record 'BroadcastEnvironmentChange' }.GetNewClosure()
         DirectoryExists = { param($path) Test-Path -LiteralPath (& $mapPath $path) -PathType Container }.GetNewClosure()
         EnsureDirectory = { param($path) & $record 'EnsureDirectory'; New-Item -ItemType Directory -Path (& $mapPath $path) -Force | Out-Null }.GetNewClosure()
         CopyFile = {
@@ -917,7 +1029,29 @@ function Get-WifimicTestStateRoot {
     return $candidate
 }
 
+function Add-WifimicFakeStateToResult {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][pscustomobject]$Result,
+        [Parameter(Mandatory = $true)][pscustomobject]$Operations,
+        [Parameter(Mandatory = $true)][pscustomobject]$Identity
+    )
+
+    $state = Invoke-WifimicOperation -Operations $Operations -Name 'GetState'
+    $legacyUpdater = Invoke-WifimicOperation -Operations $Operations -Name 'CaptureFile' -Arguments @($Identity.LegacyUpdaterPath)
+    $Result | Add-Member -NotePropertyName FakeTask -NotePropertyValue ($(if ($null -ne $state.Task) { $state.Task.TaskPath } else { $null }))
+    $Result | Add-Member -NotePropertyName FakeFirewall -NotePropertyValue ($(if ($null -ne $state.Firewall) { $state.Firewall.DisplayName } else { $null }))
+    $Result | Add-Member -NotePropertyName FakeInstallRoot -NotePropertyValue $script:CanonicalInstallRoot
+    $Result | Add-Member -NotePropertyName FakeMachinePath -NotePropertyValue $state.MachinePath
+    $Result | Add-Member -NotePropertyName FakeLegacyUpdaterExists -NotePropertyValue ($null -ne $legacyUpdater)
+    $Result | Add-Member -NotePropertyName FakeLegacyUpdaterBase64 -NotePropertyValue ($(if ($null -ne $legacyUpdater) { [Convert]::ToBase64String($legacyUpdater.Bytes) } else { $null }))
+    $Result | Add-Member -NotePropertyName FakeInitialLegacyUpdaterBase64 -NotePropertyValue $state.InitialLegacyUpdaterBase64
+    $Result | Add-Member -NotePropertyName FakeEvents -NotePropertyValue @($state.Events)
+    return $Result
+}
+
 $testState = $null
+$operations = $null
 try {
     if ($TestMode -and $DryRun) {
         Throw-WifimicInstallerError -Code 'InvalidMode' -Message 'TestMode and DryRun are mutually exclusive.'
@@ -928,7 +1062,7 @@ try {
 
     $operations = if ($TestMode -or $DryRun) {
         $testState = Get-WifimicTestStateRoot -Requested $TestStateRoot
-        New-WifimicFakeOperations -StateRoot $testState -EndpointNames $FakeRenderEndpoints
+        New-WifimicFakeOperations -StateRoot $testState -EndpointNames $FakeRenderEndpoints -MachinePath $FakeMachinePath -LegacyUpdaterContent $FakeLegacyUpdaterContent
     }
     else {
         if ($FailurePoint) { Throw-WifimicInstallerError -Code 'InvalidMode' -Message 'FailurePoint is only available in TestMode.' }
@@ -937,17 +1071,29 @@ try {
 
     $mode = if ($TestMode) { 'Test' } elseif ($DryRun) { 'DryRun' } else { 'Native' }
     $result = Invoke-WifimicInstall -ClientExecutable $ClientExecutable -RenderEndpoint $RenderEndpoint -Operations $operations -DryRun:$DryRun -FailurePoint $FailurePoint -Mode $mode
-    if ($TestMode -and $null -ne $operations.GetState) {
-        $state = Invoke-WifimicOperation -Operations $operations -Name 'GetState'
-        $result | Add-Member -NotePropertyName FakeTask -NotePropertyValue ($(if ($null -ne $state.Task) { $state.Task.TaskPath } else { $null }))
-        $result | Add-Member -NotePropertyName FakeFirewall -NotePropertyValue ($(if ($null -ne $state.Firewall) { $state.Firewall.DisplayName } else { $null }))
-        $result | Add-Member -NotePropertyName FakeInstallRoot -NotePropertyValue $script:CanonicalInstallRoot
-        $result | Add-Member -NotePropertyName FakeEvents -NotePropertyValue @($state.Events)
+    if (($TestMode -or $DryRun) -and $null -ne $operations.GetState) {
+        $identity = Get-WifimicIdentity -Endpoint $RenderEndpoint
+        $result = Add-WifimicFakeStateToResult -Result $result -Operations $operations -Identity $identity
     }
     $result | ConvertTo-Json -Compress
     exit 0
 }
 catch {
+    if ($TestMode -and $null -ne $operations -and $null -ne $operations.GetState) {
+        $failureResult = [pscustomobject]@{
+            Status = 'Failed'
+            Mode = 'Test'
+            ErrorCode = [string]$_.Exception.Data['WifimicCode']
+        }
+        try {
+            $identity = Get-WifimicIdentity -Endpoint $RenderEndpoint
+            $failureResult = Add-WifimicFakeStateToResult -Result $failureResult -Operations $operations -Identity $identity
+            $failureResult | ConvertTo-Json -Compress
+        }
+        catch {
+            [Console]::Error.WriteLine("wifimic-client installer could not serialize TestMode failure state: $($_.Exception.Message)")
+        }
+    }
     $stack = if ($null -eq $_.ScriptStackTrace) { '' } else { " Stack: $($_.ScriptStackTrace -replace "`r?`n", ' | ')" }
     [Console]::Error.WriteLine("wifimic-client installer failed: $($_.Exception.Message)$stack")
     exit 1

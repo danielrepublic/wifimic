@@ -31,7 +31,7 @@ use crate::status::{run_status, NativeServiceQueries};
 use crate::update_cli::{
     check_update_exit_code, render_check_update, run_check_update, NativeTagDiscovery,
 };
-use crate::upgrade::{run_upgrade, NativeUpgradeOperations};
+use crate::upgrade::{LinuxUpdateAdapter, HEALTH_TIMEOUT};
 
 const WIFIMIC_SERVER_VERSION: &str = env!("WIFIMIC_SERVER_VERSION");
 const RECEIVE_POLL_INTERVAL: Duration = Duration::from_millis(1);
@@ -64,7 +64,7 @@ enum MainError {
     #[error("update check failed: {0}")]
     CheckUpdate(#[from] wifimic_update::UpdateError),
     #[error("upgrade failed: {0}")]
-    Upgrade(#[from] crate::upgrade::UpgradeError),
+    Upgrade(#[from] wifimic_update::TransactionError),
     #[error("status failed: {0}")]
     Status(#[from] crate::status::StatusError),
     #[error("doctor failed: {0}")]
@@ -92,11 +92,31 @@ fn run_main() -> Result<(), MainError> {
             println!("{}", result.render());
             Ok(())
         }
-        Command::Upgrade { tag } => {
-            let mut operations = NativeUpgradeOperations;
-            let result = run_upgrade(&mut operations, tag.as_deref(), WIFIMIC_SERVER_VERSION)?;
-            println!("{}", result.render());
-            Ok(())
+        Command::Upgrade { target } => {
+            let result = wifimic_update::run_update_transaction(
+                &mut LinuxUpdateAdapter,
+                target,
+                WIFIMIC_SERVER_VERSION,
+                HEALTH_TIMEOUT,
+            )?;
+            match result {
+                wifimic_update::TransactionOutcome::NoOp { .. } => {
+                    println!("已是最新版本");
+                    Ok(())
+                }
+                wifimic_update::TransactionOutcome::Installed { tag } => {
+                    println!("已更新至 {tag}");
+                    Ok(())
+                }
+                wifimic_update::TransactionOutcome::RolledBack { cause } => {
+                    println!("更新失敗：{cause}；已還原至先前版本");
+                    Err(MainError::Upgrade(*cause))
+                }
+                wifimic_update::TransactionOutcome::RollbackVerificationFailed { cause } => {
+                    println!("更新失敗：{cause}；且無法確認還原狀態");
+                    Err(MainError::Upgrade(*cause))
+                }
+            }
         }
         Command::Status => {
             let report = run_status(&NativeServiceQueries, WIFIMIC_SERVER_VERSION)?;

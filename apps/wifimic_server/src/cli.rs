@@ -13,7 +13,9 @@ pub(crate) enum Command {
     /// Checks the latest public release without changing local state.
     Update,
     /// Downloads and installs a release with rollback protection.
-    Upgrade { tag: Option<String> },
+    Upgrade {
+        target: wifimic_update::UpdateTarget,
+    },
     /// Prints service version and systemd state.
     Status,
     /// Runs the one-shot host self-check.
@@ -29,16 +31,14 @@ pub(crate) enum CliParseError {
     /// A subcommand received an unexpected trailing argument.
     #[error("unexpected argument {argument:?} after the command")]
     UnexpectedTrailing { argument: String },
-    /// `upgrade --tag` was not followed by a tag value.
-    #[error("upgrade --tag requires a vMAJOR.MINOR.PATCH value")]
-    MissingTag,
 }
 
 /// Parses the fixed server CLI grammar and defaults to service mode.
 ///
 /// # Errors
-/// Returns [`CliParseError`] when an argument is unknown, duplicated, or missing
-/// the value required by `upgrade --tag`.
+/// Returns [`CliParseError`] when an argument is unknown, duplicated, or the
+/// `upgrade` positional argument is neither `latest` nor a strict
+/// `vMAJOR.MINOR.PATCH` release tag.
 pub(crate) fn parse_command<I>(arguments: I) -> Result<Command, CliParseError>
 where
     I: IntoIterator<Item = String>,
@@ -85,21 +85,16 @@ fn parse_service_flags(
 
 fn parse_upgrade(mut arguments: impl Iterator<Item = String>) -> Result<Command, CliParseError> {
     let Some(argument) = arguments.next() else {
-        return Ok(Command::Upgrade { tag: None });
+        return Ok(Command::Upgrade {
+            target: wifimic_update::UpdateTarget::Latest,
+        });
     };
-    if argument != "--tag" {
-        return Err(CliParseError::Unrecognized { argument });
-    }
-    let Some(tag) = arguments.next() else {
-        return Err(CliParseError::MissingTag);
-    };
-    if tag.starts_with('-') {
-        return Err(CliParseError::MissingTag);
-    }
+    let target = wifimic_update::parse_update_target(Some(&argument))
+        .map_err(|_error| CliParseError::Unrecognized { argument })?;
     if let Some(argument) = arguments.next() {
         return Err(CliParseError::UnexpectedTrailing { argument });
     }
-    Ok(Command::Upgrade { tag: Some(tag) })
+    Ok(Command::Upgrade { target })
 }
 
 fn finish_simple_command(
@@ -114,6 +109,8 @@ fn finish_simple_command(
 
 #[cfg(test)]
 mod tests {
+    use wifimic_update::UpdateTarget;
+
     use super::{parse_command, CliParseError, Command};
 
     fn parse(arguments: &[&str]) -> Result<Command, CliParseError> {
@@ -157,12 +154,20 @@ mod tests {
             (vec!["wifimic_server", "update"], Command::Update),
             (
                 vec!["wifimic_server", "upgrade"],
-                Command::Upgrade { tag: None },
+                Command::Upgrade {
+                    target: UpdateTarget::Latest,
+                },
             ),
             (
-                vec!["wifimic_server", "upgrade", "--tag", "v0.2.0"],
+                vec!["wifimic_server", "upgrade", "latest"],
                 Command::Upgrade {
-                    tag: Some("v0.2.0".to_owned()),
+                    target: UpdateTarget::Latest,
+                },
+            ),
+            (
+                vec!["wifimic_server", "upgrade", "v0.2.0"],
+                Command::Upgrade {
+                    target: UpdateTarget::Tag("v0.2.0".to_owned()),
                 },
             ),
             (vec!["wifimic_server", "status"], Command::Status),
@@ -179,15 +184,54 @@ mod tests {
     }
 
     #[test]
-    fn rejects_missing_upgrade_tag_without_panicking() {
+    fn rejects_upgrade_tag_flag_as_unrecognized() {
         // Given
-        let arguments = ["wifimic_server", "upgrade", "--tag"];
+        let arguments = ["wifimic_server", "upgrade", "--tag", "v0.2.0"];
 
         // When
         let result = parse(&arguments);
 
         // Then
-        assert_eq!(result, Err(CliParseError::MissingTag));
+        assert_eq!(
+            result,
+            Err(CliParseError::Unrecognized {
+                argument: "--tag".to_owned()
+            })
+        );
+    }
+
+    #[test]
+    fn rejects_upgrade_with_invalid_tag_as_unrecognized() {
+        // Given
+        let arguments = ["wifimic_server", "upgrade", "not-a-tag"];
+
+        // When
+        let result = parse(&arguments);
+
+        // Then
+        assert_eq!(
+            result,
+            Err(CliParseError::Unrecognized {
+                argument: "not-a-tag".to_owned()
+            })
+        );
+    }
+
+    #[test]
+    fn rejects_upgrade_with_trailing_argument_after_target() {
+        // Given
+        let arguments = ["wifimic_server", "upgrade", "v0.2.0", "extra"];
+
+        // When
+        let result = parse(&arguments);
+
+        // Then
+        assert_eq!(
+            result,
+            Err(CliParseError::UnexpectedTrailing {
+                argument: "extra".to_owned()
+            })
+        );
     }
 
     #[test]

@@ -18,7 +18,7 @@ impl TagDiscovery for NativeTagDiscovery {
 
 /// Represents a successful, non-mutating update check.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum CheckUpdateOutcome {
+pub enum CheckUpdateOutcome {
     /// The current and latest release tags are equal.
     UpToDate { current: String, latest: String },
     /// A newer release is available.
@@ -32,7 +32,7 @@ impl CheckUpdateOutcome {
         match self {
             Self::UpToDate { current, .. } => format!("目前版本 {current} 已是最新版本"),
             Self::UpdateAvailable { current, latest } => format!(
-                "有新版本可用：{current} → {latest}，執行 `wifimic_server upgrade` 進行更新"
+                "有新版本可用：{current} → {latest}，執行 `wifimic_client upgrade` 進行更新"
             ),
             Self::CurrentNewer { current, latest } => {
                 format!("目前版本 {current} 比最新版本 {latest} 更新")
@@ -42,7 +42,7 @@ impl CheckUpdateOutcome {
 }
 
 /// Renders the one-line output for a check result.
-pub(crate) fn render_check_update(result: &Result<CheckUpdateOutcome, UpdateError>) -> String {
+pub fn render_check_update(result: &Result<CheckUpdateOutcome, UpdateError>) -> String {
     match result {
         Ok(outcome) => outcome.render(),
         Err(error) => format!("更新檢查失敗：{error}"),
@@ -51,7 +51,7 @@ pub(crate) fn render_check_update(result: &Result<CheckUpdateOutcome, UpdateErro
 
 /// Returns the process exit code for a check result.
 #[must_use]
-pub(crate) fn check_update_exit_code(result: &Result<CheckUpdateOutcome, UpdateError>) -> u8 {
+pub fn check_update_exit_code(result: &Result<CheckUpdateOutcome, UpdateError>) -> u8 {
     if result.is_ok() {
         0
     } else {
@@ -89,6 +89,16 @@ pub(crate) fn run_check_update<D: TagDiscovery>(
         }
     };
     Ok(outcome)
+}
+
+/// Handler: runs a non-mutating update check using `NativeTagDiscovery` and
+/// the compiled client version embedded by `build.rs` (`WIFIMIC_CLIENT_VERSION`).
+///
+/// This is the dispatch target for the `wifimic_client update` CLI
+/// subcommand. It does not download or install anything — it only reports
+/// the comparison between the current version and the latest GitHub release.
+pub fn handle_check_update() -> Result<CheckUpdateOutcome, UpdateError> {
+    run_check_update(&NativeTagDiscovery, env!("WIFIMIC_CLIENT_VERSION"))
 }
 
 #[cfg(test)]
@@ -176,7 +186,9 @@ mod tests {
             &result,
             CheckUpdateOutcome::UpdateAvailable { .. }
         ));
-        assert!(render_check_update(&Ok(result)).contains("有新版本可用"));
+        let rendered = render_check_update(&Ok(result));
+        assert!(rendered.contains("有新版本可用"));
+        assert!(rendered.contains("wifimic_client upgrade"));
     }
 
     #[test]
@@ -195,5 +207,21 @@ mod tests {
         assert_eq!(check_update_exit_code(&result), 1);
         assert!(render_check_update(&result).contains("更新檢查失敗"));
         assert!(matches!(result, Err(UpdateError::Network { .. })));
+    }
+
+    #[test]
+    fn check_update_renders_wifimic_client_upgrade_when_available() {
+        // Given
+        let discovery = FakeDiscovery {
+            result: Ok("v0.2.0".to_owned()),
+        };
+
+        // When
+        let result = run_check_update(&discovery, "v0.1.12").expect("fake check succeeds");
+
+        // Then
+        let rendered = result.render();
+        assert!(rendered.contains("wifimic_client upgrade"));
+        assert!(!rendered.contains("wifimic_server"));
     }
 }

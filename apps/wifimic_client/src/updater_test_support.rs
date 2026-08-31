@@ -1,73 +1,51 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use crate::updater::{TaskSnapshot, UpdaterError, UpdaterOperations};
+use wifimic_update::{RollbackOutcome, TransactionError, UpdateAdapter, UpdateError};
+
+use crate::updater::TaskSnapshot;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum FailurePoint {
-    DisableTask,
-    StopTask,
+    PreSwap,
     Swap,
-    RestoreTask,
-    EnableTask,
-    StartTask,
+    PostSwap,
     Health,
-    EndpointCheck,
+    TaskDoesNotReachRunning,
 }
 
 #[derive(Debug)]
 pub(super) struct FakeUpdaterState {
     pub(super) calls: Vec<&'static str>,
     pub(super) failure: Option<FailurePoint>,
-    pub(super) primary_failure_triggered: bool,
-    pub(super) fail_restore_executable: bool,
+    pub(super) fail_restore: bool,
     pub(super) current_task: TaskSnapshot,
     pub(super) current_executable: Vec<u8>,
-    pub(super) backup_executable: Option<Vec<u8>>,
+    pub(super) task_running: bool,
+    backup_executable: Option<Vec<u8>>,
 }
 
 #[derive(Debug)]
-pub(super) struct FakeUpdaterOperations {
+pub(super) struct FakeUpdateAdapter {
     pub(super) state: FakeUpdaterState,
 }
 
-impl FakeUpdaterOperations {
+impl FakeUpdateAdapter {
     pub(super) fn with_failure(failure: Option<FailurePoint>) -> Self {
-        let current_task = TaskSnapshot::new(
-            "<Task><Enabled>true</Enabled></Task>".to_owned(),
-            true,
-            true,
-        );
         Self {
             state: FakeUpdaterState {
                 calls: Vec::new(),
                 failure,
-                primary_failure_triggered: false,
-                fail_restore_executable: false,
-                current_task,
+                fail_restore: false,
+                current_task: TaskSnapshot::new(
+                    "<Task><Enabled>true</Enabled></Task>".to_owned(),
+                    true,
+                    true,
+                ),
                 current_executable: b"old-client".to_vec(),
+                task_running: true,
                 backup_executable: None,
             },
-        }
-    }
-
-    fn fail_if(&mut self, point: FailurePoint) -> Result<(), UpdaterError> {
-        if self.state.failure == Some(point) && !self.state.primary_failure_triggered {
-            self.state.primary_failure_triggered = true;
-            Err(UpdaterError::Operation {
-                operation: match point {
-                    FailurePoint::DisableTask => "disable_task",
-                    FailurePoint::StopTask => "stop_task",
-                    FailurePoint::Swap => "atomic_swap_executable",
-                    FailurePoint::RestoreTask => "restore_task",
-                    FailurePoint::EnableTask => "enable_task",
-                    FailurePoint::StartTask => "start_task",
-                    FailurePoint::Health => "wait_for_healthy",
-                    FailurePoint::EndpointCheck => "check_render_endpoint_enumerable",
-                },
-            })
-        } else {
-            Ok(())
         }
     }
 
@@ -78,127 +56,114 @@ impl FakeUpdaterOperations {
             .filter(|called| **called == operation)
             .count()
     }
+
+    fn fails_at(&self, point: FailurePoint) -> bool {
+        self.state.failure == Some(point)
+    }
+
+    fn error_for(point: FailurePoint) -> TransactionError {
+        match point {
+            FailurePoint::PreSwap => TransactionError::PreSwap {
+                message: "pre-swap failed".to_owned(),
+            },
+            FailurePoint::Swap => TransactionError::Swap {
+                message: "swap failed".to_owned(),
+            },
+            FailurePoint::PostSwap => TransactionError::PostSwap {
+                message: "post-swap failed".to_owned(),
+            },
+            FailurePoint::Health => TransactionError::HealthCheck {
+                timeout: Duration::from_secs(45),
+            },
+            FailurePoint::TaskDoesNotReachRunning => TransactionError::HealthCheck {
+                timeout: Duration::from_secs(45),
+            },
+        }
+    }
 }
 
-impl UpdaterOperations for FakeUpdaterOperations {
-    fn resolve_latest_tag(&mut self) -> Result<String, UpdaterError> {
-        self.state.calls.push("resolve_latest_tag");
+impl UpdateAdapter for FakeUpdateAdapter {
+    type Snapshot = TaskSnapshot;
+
+    fn discover_latest_tag(&mut self) -> Result<String, UpdateError> {
+        self.state.calls.push("discover");
         Ok("v0.2.0".to_owned())
     }
 
-    fn download_and_verify(&mut self, _tag: &str) -> Result<PathBuf, UpdaterError> {
-        self.state.calls.push("download_and_verify");
+    fn stage(&mut self, _tag: &str) -> Result<PathBuf, TransactionError> {
+        self.state.calls.push("stage");
         Ok(PathBuf::from("staged"))
     }
 
-    fn backup_current_executable(&mut self, _backup_path: &Path) -> Result<(), UpdaterError> {
-        self.state.calls.push("backup_current_executable");
+    fn backup(&mut self, _staged: &Path) -> Result<Self::Snapshot, TransactionError> {
+        self.state.calls.push("backup");
         self.state.backup_executable = Some(self.state.current_executable.clone());
-        Ok(())
-    }
-
-    fn restore_executable(
-        &mut self,
-        _backup_path: &Path,
-        _install_path: &Path,
-    ) -> Result<(), UpdaterError> {
-        self.state.calls.push("restore_executable");
-        if self.state.fail_restore_executable {
-            return Err(UpdaterError::Operation {
-                operation: "restore_executable",
-            });
-        }
-        let Some(backup) = &self.state.backup_executable else {
-            return Err(UpdaterError::Operation {
-                operation: "restore_executable",
-            });
-        };
-        self.state.current_executable = backup.clone();
-        Ok(())
-    }
-
-    fn get_task(&mut self) -> Result<TaskSnapshot, UpdaterError> {
-        self.state.calls.push("get_task");
         Ok(self.state.current_task.clone())
     }
 
-    fn disable_task(&mut self) -> Result<(), UpdaterError> {
-        self.state.calls.push("disable_task");
-        self.fail_if(FailurePoint::DisableTask)?;
-        self.state.current_task = TaskSnapshot::new(
-            self.state.current_task.xml().to_owned(),
-            false,
-            self.state.current_task.running(),
-        );
+    fn pre_swap(&mut self, _snapshot: &Self::Snapshot) -> Result<(), TransactionError> {
+        self.state.calls.push("pre_swap");
+        if self.fails_at(FailurePoint::PreSwap) {
+            return Err(Self::error_for(FailurePoint::PreSwap));
+        }
+        self.state.task_running = false;
         Ok(())
     }
 
-    fn stop_task(&mut self) -> Result<(), UpdaterError> {
-        self.state.calls.push("stop_task");
-        self.fail_if(FailurePoint::StopTask)?;
-        self.state.current_task = TaskSnapshot::new(
-            self.state.current_task.xml().to_owned(),
-            self.state.current_task.enabled(),
-            false,
-        );
-        Ok(())
-    }
-
-    fn restore_task(&mut self, snapshot: &TaskSnapshot) -> Result<(), UpdaterError> {
-        self.state.calls.push("restore_task");
-        self.fail_if(FailurePoint::RestoreTask)?;
-        self.state.current_task = snapshot.clone();
-        Ok(())
-    }
-
-    fn enable_task(&mut self) -> Result<(), UpdaterError> {
-        self.state.calls.push("enable_task");
-        self.fail_if(FailurePoint::EnableTask)?;
-        self.state.current_task = TaskSnapshot::new(
-            self.state.current_task.xml().to_owned(),
-            true,
-            self.state.current_task.running(),
-        );
-        Ok(())
-    }
-
-    fn start_task(&mut self) -> Result<(), UpdaterError> {
-        self.state.calls.push("start_task");
-        self.fail_if(FailurePoint::StartTask)?;
-        self.state.current_task = TaskSnapshot::new(
-            self.state.current_task.xml().to_owned(),
-            self.state.current_task.enabled(),
-            true,
-        );
-        Ok(())
-    }
-
-    fn atomic_swap_executable(
-        &mut self,
-        _staged: &Path,
-        _install_path: &Path,
-    ) -> Result<(), UpdaterError> {
-        self.state.calls.push("atomic_swap_executable");
-        self.fail_if(FailurePoint::Swap)?;
+    fn swap(&mut self, _staged: &Path, _snapshot: &Self::Snapshot) -> Result<(), TransactionError> {
+        self.state.calls.push("swap");
+        if self.fails_at(FailurePoint::Swap) {
+            return Err(Self::error_for(FailurePoint::Swap));
+        }
         self.state.current_executable = b"new-client".to_vec();
         Ok(())
     }
 
-    fn check_render_endpoint_enumerable(&mut self) -> Result<bool, UpdaterError> {
-        self.state.calls.push("check_render_endpoint_enumerable");
-        if self.fail_if(FailurePoint::EndpointCheck).is_err() {
-            Ok(false)
-        } else {
-            Ok(true)
+    fn post_swap(&mut self, snapshot: &Self::Snapshot) -> Result<(), TransactionError> {
+        self.state.calls.push("post_swap");
+        if self.fails_at(FailurePoint::PostSwap) {
+            return Err(Self::error_for(FailurePoint::PostSwap));
         }
+        self.state.current_task = snapshot.clone();
+        if snapshot.enabled() {
+            self.state.calls.push("start_task");
+            self.state.task_running = !self.fails_at(FailurePoint::TaskDoesNotReachRunning);
+        }
+        Ok(())
     }
 
-    fn wait_for_healthy(&mut self, _timeout: Duration) -> Result<bool, UpdaterError> {
-        self.state.calls.push("wait_for_healthy");
-        if self.fail_if(FailurePoint::Health).is_err() {
-            Ok(false)
-        } else {
-            Ok(true)
+    fn health_check(&mut self, _timeout: Duration) -> Result<bool, TransactionError> {
+        self.state.calls.push("health");
+        Ok(self.state.task_running && !self.fails_at(FailurePoint::Health))
+    }
+
+    fn rollback(&mut self, snapshot: &Self::Snapshot) -> RollbackOutcome {
+        self.state.calls.push("rollback");
+        if self.state.task_running {
+            self.state.calls.push("stop_task");
+            self.state.task_running = false;
+            self.state.calls.push("wait_until_stopped");
         }
+        self.state.calls.push("restore_executable");
+        if self.state.fail_restore {
+            return RollbackOutcome::VerificationFailed;
+        }
+        if let Some(backup) = &self.state.backup_executable {
+            self.state.current_executable = backup.clone();
+        }
+        self.state.current_task = snapshot.clone();
+        if snapshot.running() {
+            self.state.calls.push("restart_original_task");
+            self.state.task_running = true;
+        }
+        RollbackOutcome::Verified
+    }
+
+    fn cleanup_staging(&mut self, _staged: &Path) {
+        self.state.calls.push("cleanup_staging");
+    }
+
+    fn cleanup_backup(&mut self, _snapshot: &Self::Snapshot) {
+        self.state.calls.push("cleanup_backup");
     }
 }
