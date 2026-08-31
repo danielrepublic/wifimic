@@ -1,6 +1,8 @@
 use wifimic_update::UpdateTarget;
 
-use super::{dispatch, requires_diagnostics, DispatchError};
+#[cfg(not(target_os = "windows"))]
+use super::dispatch;
+use super::requires_diagnostics;
 use crate::cli;
 
 #[test]
@@ -35,8 +37,9 @@ fn only_run_audio_requires_diagnostics_initialization() {
     }
 }
 
+#[cfg(not(target_os = "windows"))]
 #[test]
-fn internal_apply_upgrade_is_a_deterministic_transitional_error() {
+fn internal_apply_upgrade_is_rejected_outside_windows() {
     // Given
     let command = cli::Command::InternalApplyUpgrade {
         tag: "v1.2.3".to_owned(),
@@ -46,10 +49,9 @@ fn internal_apply_upgrade_is_a_deterministic_transitional_error() {
     let result = dispatch(command);
 
     // Then
-    let error =
-        result.expect_err("internal-apply-upgrade must fail until todo 15 wires the adapter");
+    let error = result.expect_err("internal upgrade is Windows-only");
     assert_eq!(
-        error.downcast_ref::<DispatchError>(),
-        Some(&DispatchError::InternalApplyUnavailableUntilAdapter)
+        error.to_string(),
+        "--internal-apply-upgrade is Windows-only"
     );
 }

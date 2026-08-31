@@ -1,20 +1,5 @@
 use crate::{cli, doctor, handoff, logging, status};
 
-/// Reports the internal update entry point that is not wired until a later todo.
-///
-/// Both variants are deterministic, testable errors: neither arm downloads,
-/// mutates local state, or elevates. Todo 14 replaces
-/// [`DispatchError::UpgradeUnavailableUntilHandoff`] with the real
-/// non-elevated preflight and handoff launch; todo 15 replaces
-/// [`DispatchError::InternalApplyUnavailableUntilAdapter`] with
-/// `WindowsUpgradeAdapter`.
-#[derive(Debug, thiserror::Error, PartialEq, Eq)]
-pub(crate) enum DispatchError {
-    /// `--internal-apply-upgrade` was requested before the Windows adapter exists.
-    #[error("--internal-apply-upgrade is not available until the Windows adapter is implemented")]
-    InternalApplyUnavailableUntilAdapter,
-}
-
 /// Runs the command selected by [`cli::parse_command`].
 ///
 /// [`cli::Command::RunAudio`] preserves today's default behavior exactly:
@@ -96,10 +81,30 @@ pub(crate) fn dispatch(command: cli::Command) -> Result<(), Box<dyn std::error::
             }
             Ok(())
         }
-        cli::Command::InternalApplyUpgrade { tag: _ } => {
-            Err(DispatchError::InternalApplyUnavailableUntilAdapter.into())
-        }
+        cli::Command::InternalApplyUpgrade { tag } => apply_internal_upgrade(&tag),
     }
+}
+
+#[cfg(target_os = "windows")]
+fn apply_internal_upgrade(tag: &str) -> Result<(), Box<dyn std::error::Error>> {
+    use wifimic_update::{run_update_transaction, TransactionOutcome, UpdateTarget};
+
+    let outcome = run_update_transaction(
+        &mut wifimic_client::updater_native::WindowsUpgradeAdapter::default(),
+        UpdateTarget::Tag(tag.to_owned()),
+        env!("WIFIMIC_CLIENT_VERSION"),
+        wifimic_client::updater::HEALTH_TIMEOUT,
+    )?;
+    match outcome {
+        TransactionOutcome::NoOp { .. } | TransactionOutcome::Installed { .. } => Ok(()),
+        TransactionOutcome::RolledBack { cause } => Err(cause),
+        TransactionOutcome::RollbackVerificationFailed { cause } => Err(cause),
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn apply_internal_upgrade(_tag: &str) -> Result<(), Box<dyn std::error::Error>> {
+    Err("--internal-apply-upgrade is Windows-only".into())
 }
 
 /// Returns whether `command` must initialize diagnostics logging before it
