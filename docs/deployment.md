@@ -29,7 +29,7 @@
 | Linux systemd 使用者單元路徑 | `~/.config/systemd/user/wifimic-server.service` | `deploy/linux/update-wifimic-server.sh:7` |
 | Linux 更新腳本 | `deploy/linux/update-wifimic-server.sh` | — |
 | Windows 安裝腳本 | `deploy/windows/install-wifimic-client.ps1` | — |
-| Windows 更新工具 | `C:\Program Files\wifimic-client\wifimic_client_updater.exe`（安裝目錄內雙擊執行，無需額外腳本路徑） | ADR `docs/adr/0001-windows-update-moves-from-source-build-to-self-updater-binary.md` |
+| Windows 平台命令介面（`Platform Command Interface`） | `wifimic_client update`（查詢）、`wifimic_client upgrade [latest|vX.Y.Z]`（升級）、`wifimic_client status`、`wifimic_client doctor` | `apps/wifimic_client/src/cli.rs` |
 
 ---
 
@@ -463,89 +463,129 @@ journalctl --user -u wifimic-server -f
 
 ## 7. Windows 用戶端更新
 
-自 v0.2.0 起，Windows 用戶端更新改由 `wifimic_client_updater.exe`（自更新二進位檔）執行，取代先前的 PowerShell 更新腳本（見 ADR `docs/adr/0001-windows-update-moves-from-source-build-to-self-updater-binary.md`）。該程式與 `wifimic_client.exe` 共存於 `C:\Program Files\wifimic-client\` 安裝目錄，雙擊即可檢查 GitHub latest release 並完成更新，無需命令列參數，無需原始碼、`git`、`cargo` 等開發工具。
+`wifimic_client.exe` 內建手動更新子命令；安裝腳本已將安裝目錄加入系統 PATH，可於新開啟的命令提示字元或 PowerShell 中直接呼叫。預設呼叫（無引數或僅含 `--calibrate`、`--diagnose-latency`）保留原有音訊串流行為；以下子命令為顯式的一次性操作，互不干擾，無背景自動更新機制。
 
-> **不對稱性說明**：與 Linux 端的 `wifimic_server upgrade --tag vX.Y.Z` 不同，`wifimic_client_updater.exe` **不接受任何命令列參數**，僅針對目前 GitHub 上的 latest release 進行更新——無法指定精確標籤。因此版本發布流程中的 Windows 端驗證，只能確認「已安裝 latest」，無法像 Linux 端一樣驗證特定剛發布的標籤版本。
+### 7.1 平台命令介面（`Platform Command Interface`）
 
-### 7.1 先決條件
+| 命令 | 行為 | 是否修改系統狀態 |
+|------|------|----------------|
+| `wifimic_client update` | 查詢 GitHub 最新版本，與已安裝版本比較後輸出一行報告 | **否**（純查詢） |
+| `wifimic_client upgrade` 或 `upgrade latest` | 取得最新版本並透過 `Windows 更新移交腳本`（`Windows Update Handoff Script`）安裝 | 是 |
+| `wifimic_client upgrade vX.Y.Z` | 取得指定版本標籤（`更新合約` / `Update Target`）並安裝 | 是 |
+| `wifimic_client status` | 輸出已安裝版本與排程工作狀態 | **否** |
+| `wifimic_client doctor` | 執行主機自我診斷 | **否** |
 
-- `wifimic_client_updater.exe` 已安裝於 `C:\Program Files\wifimic-client\`（由第 5 節首次安裝流程建立）
-- `C:\Program Files\wifimic-client\wifimic_client.exe` 存在（更新程式自動偵測其姊妹路徑）
-- `CABLE Input (VB-Audio Virtual Cable)` 端點可列舉
-- 具備系統管理員權限的互動式工作階段（UAC 授權需要；更新程式內嵌 `requireAdministrator` 資源檔）
+> **`upgrade` 語法**：目標為位置引數，接受 `latest` 或嚴格符合 `vMAJOR.MINOR.PATCH` 格式的版本標籤；無 `--tag` 旗標。省略引數等同於 `latest`。
 
-> **一次性安裝注意**：若機器從未安裝過 v0.2.0（即 `wifimic_client_updater.exe` 尚不存在於安裝目錄），必須先執行一次完整安裝流程（README 一鍵安裝指令或 `deploy/windows/install-wifimic-client.ps1`，見第 5 節），使 `wifimic_client_updater.exe` 存在後，才能改用雙擊更新。此為一次性步驟：之後的版本更新只需雙擊更新程式即可。
+### 7.2 先決條件
 
-### 7.2 執行更新
+- 已完成第 5 節首次安裝，`C:\Program Files\wifimic-client\wifimic_client.exe` 存在
+- 安裝腳本已將 `C:\Program Files\wifimic-client` 加入系統層級 PATH（`Machine` 作用域）；必須**開啟新的**命令提示字元或 PowerShell 視窗方可直接呼叫 `wifimic_client`（已開啟的終端機工作階段不會即時取得新 PATH）
+- 執行 `upgrade` 需要互動式登入工作階段（Windows UAC 提示需要桌面）；`update`、`status`、`doctor` 不需要提升授權
+- `CABLE Input (VB-Audio Virtual Cable)` 端點可列舉（`upgrade` 健康檢查必要）
 
-以**系統管理員身分**開啟檔案總管或命令提示字元，雙擊或執行：
+### 7.3 執行更新查詢（非破壞性）
 
+```powershell
+# 於新開啟的命令提示字元或 PowerShell 中執行
+wifimic_client update
 ```
-C:\Program Files\wifimic-client\wifimic_client_updater.exe
+
+輸出範例：
+
+| 情況 | 輸出 |
+|------|------|
+| 已是最新版本 | `目前版本 v0.1.12 已是最新版本` |
+| 有更新可用 | `有新版本可用：v0.1.12 → v0.2.0，執行 wifimic_client upgrade 進行更新` |
+| 已安裝版本較新 | `目前版本 v0.2.0 比最新版本 v0.1.12 更新` |
+
+此命令不下載任何檔案、不修改任何系統狀態。網路連線失敗時以退出碼 1 結束。
+
+### 7.4 執行升級
+
+#### 7.4.1 指令語法
+
+```powershell
+# 更新至最新版本（以下兩種寫法等效）
+wifimic_client upgrade
+wifimic_client upgrade latest
+
+# 更新至指定版本標籤（釋出驗證場景）
+wifimic_client upgrade v0.2.0
 ```
 
-更新程式**不接受任何命令列參數**（傳入任何參數會導致程式以退出碼 2 結束並輸出錯誤訊息）。程式會：
+#### 7.4.2 升級流程（`Windows 更新移交腳本` 移交生命週期）
 
-1. 輸出 `檢查中...`
-2. 解析 GitHub 上的最新 release 標籤
-3. 與目前安裝版本（編譯時寫入的 `WIFIMIC_CLIENT_VERSION` 值）比較
+`upgrade` 採**提升授權移交**設計，分兩段執行：
 
-### 7.3 UAC 授權與拒絕行為
+**第一段（呼叫方 `wifimic_client` 程序，一般使用者權限）**：
 
-更新程式內嵌 Windows UAC `requireAdministrator` 資源檔（`assets/updater-manifest.rc`），因此在執行時會觸發 Windows 原生的「使用者帳戶控制」授權對話框。
+1. 解析目標版本（`latest` 或指定標籤）。若目前版本已符合，輸出提示後直接退出，**不執行任何系統修改**。
+2. 於系統暫存目錄寫入一次性 PowerShell 移交腳本（`wifimic-update-handoff-<pid>-<timestamp>.ps1`）。
+3. 以 `ShellExecuteW`（`runas` 動詞）請求 Windows UAC 授權，提升執行 PowerShell 以執行移交腳本；傳入目前程序 ID、版本標籤、安裝路徑為引數。
+4. 呼叫方 `wifimic_client.exe` 程序正常退出（不等待移交腳本完成）。
 
-- **核准**：程式以系統管理員權限繼續執行更新流程。
-- **拒絕**：Windows 會取消該程式——UAC 拒絕發生在 `main()` 函式之前，因此**不會有任何應用程式層級的訊息、不會修改任何檔案、不會變更任何排程工作狀態**。使用者僅看到 Windows 原生的取消對話框，程式直接結束。
+**第二段（移交腳本，提升授權，在獨立程序中執行）**：
 
-### 7.4 更新流程內部步驟（供審計參考）
+5. 等待第一段父程序（`wifimic_client.exe`）確認退出（逾時 120 秒）。
+6. 將安裝路徑的 `wifimic_client.exe` 複製至暫存執行器（`wifimic-client-upgrade-runner-<guid>.exe`）。
+7. 以 `runner --internal-apply-upgrade vX.Y.Z` 呼叫 `WindowsUpgradeAdapter` 執行升級交易，包含：
+   - 從 GitHub 下載 `wifimic-windows-x86_64.zip` 並驗證 SHA-256（`發布成品指紋驗證` / `Release Artifact Fingerprint Verification`）
+   - 備份現有 `wifimic_client.exe` 至暫存路徑
+   - 擷取排程工作 XML 定義與執行狀態快照（`TaskSnapshot`）
+   - 停用排程工作；若先前為 Running 則停止並等待非 Running
+   - 同磁碟區原子替換（複製至臨時路徑再 `rename` 至安裝路徑）
+   - 還原排程工作 XML 定義與啟用狀態；若先前為 Running 則啟動
+   - 健康檢查：排程工作啟用且 Ready/Running、`CABLE Input (VB-Audio Virtual Cable)` 端點可列舉（逾時 45 秒）
+8. 移除暫存執行器；移交腳本自我刪除。
 
-1. 驗證無命令列參數（有則退出碼 2）
-2. 輸出 `檢查中...`，解析 GitHub latest release 標籤
-3. 比較目標標籤與編譯時版本 `WIFIMIC_CLIENT_VERSION`；若相同，輸出 `已是最新版本` 並退出（無任何系統狀態變更）
-4. 輸出 `發現新版本，更新中...`
-5. 下載 `wifimic-windows-x86_64.zip` 及其 `.sha256` 校驗檔，驗證 SHA-256 完整性，解壓縮至暫存目錄
-6. 備份目前 `wifimic_client.exe` 至唯一暫存路徑（`wifimic_client.backup.<pid>-<timestamp>`）
-7. 擷取排程工作 `\wifimic\wifimic-client` 的 XML 定義、啟用狀態、執行狀態（`TaskSnapshot`）
-8. **停用排程工作** → 若先前為 Running 則**停止排程工作**並等待非 Running
-9. 同磁碟區原子替換：複製新 `wifimic_client.exe` 至暫存路徑 → `rename` 至安裝路徑（`C:\Program Files\wifimic-client\wifimic_client.exe`）
-10. 還原先前排程工作 XML 定義、還原啟用狀態、若先前 Running 則啟動排程工作
-11. 健康檢查：排程工作啟用且狀態 Ready/Running、`CABLE Input (VB-Audio Virtual Cable)` 端點可列舉（逾時 45 秒）
-12. 成功：輸出 `已更新至 {tag}`；失敗：觸發自動回滾
+#### 7.4.3 UAC 授權與拒絕行為
+
+- **核准**：移交腳本以提升授權繼續執行第二段流程。
+- **拒絕**：Windows 取消授權請求；**不會寫入任何安裝目錄檔案、不會修改任何排程工作狀態、不會變更任何防火牆規則**。移交腳本已寫入至系統暫存目錄但不會執行，不含任何機密，隨作業系統例行清理移除。
 
 ### 7.5 自動回滾機制
 
-從步驟 8（停用排程工作）開始，若任一後續步驟失敗，更新程式會自動執行回滾：
+從「停用排程工作」步驟起，若任一後續步驟失敗，`WindowsUpgradeAdapter` 自動執行回滾：
 
-1. **還原先前執行檔**：將備份的 `wifimic_client.exe` 複製回安裝路徑
-2. **還原先前排程工作**：以備份的 XML 定義重新建立排程工作，還原啟用狀態
-3. **重啟排程工作**：僅當更新前排程工作為 Running 時才啟動
+1. 將備份的 `wifimic_client.exe` 複製回安裝路徑
+2. 以備份的 XML 定義重新建立排程工作，還原啟用狀態
+3. 若升級前排程工作為 Running 則重啟
 
-回滾完成後，更新程式報告以下其中一種結果：
+回滾後的結果：
 
-| 結果 | 程式輸出 | 退出碼 | 含義 |
-|------|----------|--------|------|
-| `RolledBack` | `更新失敗：更新未完成，已還原先前版本` | 1 | 更新失敗，但回滾成功——執行檔與排程工作皆已還原至更新前狀態 |
-| `RollbackVerificationFailed` | `更新失敗：更新失敗且無法確認還原狀態` | 1 | 更新失敗，且回滾過程中某一步驟亦失敗——需要手動介入還原 |
-| `Err` | `更新失敗：{error}` | 1 | 更新在前置階段（下載、解壓縮等）失敗，尚未開始修改系統狀態，無需回滾 |
+| 回滾結果 | 含義 |
+|----------|------|
+| 驗證成功（`Verified`） | 執行檔與排程工作皆已還原至升級前狀態；移交腳本以退出碼 30 結束 |
+| 驗證失敗（`VerificationFailed`） | 回滾過程中某步驟亦失敗，需手動介入；移交腳本以退出碼 30 結束 |
 
-所有結果均會在末尾輸出 `請按 Enter 鍵結束...` 並等待使用者按 Enter 後才退出。
+> **注意**：移交腳本以 stderr 輸出錯誤訊息，但因其以提升授權在獨立程序中執行，呼叫方終端機不會顯示這些訊息。若升級後音訊功能異常，請依第 7.6 節進行驗證。若需要手動還原，請參見第 9.4 節。
 
 ### 7.6 更新後驗證
 
 ```powershell
-# 1. 排程工作存在且啟用，狀態 Ready 或 Running
+# 1. 版本確認
+wifimic_client status
+
+# 2. 排程工作存在且啟用，狀態 Ready 或 Running
 Get-ScheduledTask -TaskPath '\wifimic\' -TaskName 'wifimic-client' | Select-Object TaskPath, TaskName, State, Settings
 
-# 2. 執行檔存在且 SHA256 已變更（與更新前比對）
+# 3. 執行檔 SHA256（與發布版本的 .sha256 校驗檔比對）
 $bytes = [System.IO.File]::ReadAllBytes('C:\Program Files\wifimic-client\wifimic_client.exe')
 $sha = [System.Security.Cryptography.SHA256]::Create()
 [BitConverter]::ToString($sha.ComputeHash($bytes)).Replace('-', '').ToLowerInvariant()
 
-# 3. 端點仍可列舉
+# 4. 端點仍可列舉
 Get-PnpDevice -Class AudioEndpoint -Status OK | Where-Object { $_.FriendlyName -eq 'CABLE Input (VB-Audio Virtual Cable)' }
 ```
 
-若更新前排程工作為 Running，則更新後應仍為 Running；若更新前非 Running，則更新後應為 Ready。
+若升級前排程工作為 Running，升級後應仍為 Running；若升級前為 Ready，升級後應為 Ready。
+
+### 7.7 安裝程式的 PATH 與舊版升級程式清除
+
+**系統 PATH**：安裝腳本以 `[Environment]::SetEnvironmentVariable('Path', ..., [EnvironmentVariableTarget]::Machine)` 將 `C:\Program Files\wifimic-client` 加入系統層級 PATH。已開啟的終端機工作階段不會即時取得新的 PATH；開啟新的命令提示字元或 PowerShell 視窗後方可直接呼叫 `wifimic_client`。
+
+**舊版升級程式清除**：若修復安裝（repair install）時偵測到安裝目錄存在舊版 `wifimic_client_updater.exe`，安裝腳本會在安裝流程中將其移除（`AfterLegacyUpdaterRemoval` 階段）；安裝失敗時此移除會連同其他變更一同回滾。
 
 ---
 
@@ -611,9 +651,10 @@ Get-PnpDevice -Class AudioEndpoint -Status OK | Where-Object { $_.FriendlyName -
 | 安裝/更新報 `ConflictingTask` / `ConflictingFirewall` | 既有同名任務/規則但簽章不符（非本專案擁有） | 1. `Get-ScheduledTask -TaskPath '\wifimic\' -TaskName 'wifimic-client'` 檢查現有任務<br>2. `Get-NetFirewallRule -DisplayName 'wifimic-client'` 檢查現有規則<br>3. 手動移除衝突物件後重試 |
 | 排程工作狀態非 `Ready`/`Running` | 任務被停用、執行檔遺失、登入觸發未生效 | 1. `Get-ScheduledTask ...` 檢查 `State`、`Settings.Enabled`<br>2. 確認 `C:\Program Files\wifimic-client\wifimic_client.exe` 存在<br>3. 手動 `schtasks /Run /TN '\wifimic\wifimic-client'` 觀察啟動 |
 | 防火牆規則缺失或 RemoteAddress 不為 `192.168.0.210/32` | 安裝未完成、規則被手動刪除、群組原則覆寫 | 1. `Get-NetFirewallRule -DisplayName 'wifimic-client'` 確認存在<br>2. `Get-NetFirewallAddressFilter ...` 確認 `RemoteAddress`<br>3. 重跑安裝/更新腳本（會自動修正簽章不符） |
-| 更新報 `DirtyCheckout` | 來源倉庫有未提交變更 | `git status --porcelain --untracked-files=all` 確認輸出為空；提交或暫存變更後重試 |
-| 更新報 `AmbiguousRevision` / `BadRevision` | 標籤/提交不存在、未抓取遠端、語法錯誤 | 1. 確認標籤名稱拼寫 `git tag -l`<br>2. `git fetch --tags --prune origin`<br>3. 修訂必須為單一標籤名或 7-64 字元十六進位提交雜湊 |
-| 更新報 `CrossVolumeSwap` | 暫存目錄與安裝目錄不在同一磁碟區 | 確保 `C:\src\wifimic` 與 `C:\Program Files\wifimic-client` 同屬 C: 槽；若不同，需手動調整暫存路徑邏輯 |
+| `upgrade` 後音訊功能異常，不確定是否成功 | 移交腳本在獨立程序中執行，呼叫方終端機不顯示其錯誤訊息 | 1. `wifimic_client status` 確認已安裝版本<br>2. 依第 7.6 節完整驗證排程工作狀態與 SHA256<br>3. 若排程工作未 Running，手動 `schtasks /Run /TN '\wifimic\wifimic-client'` 觀察啟動 |
+| `upgrade vX.Y.Z` 網路或校驗失敗 | GitHub 連線異常、SHA-256 不符 | 下載/驗證失敗發生於原子替換之前，**不修改任何系統狀態**；檢查網路連線後重試；若反覆失敗，先執行 `wifimic_client update` 確認 GitHub 可達 |
+| UAC 拒絕後排程工作或執行檔無變化（預期行為） | UAC 拒絕發生在任何系統修改之前 | 此為正確行為；重新執行 `wifimic_client upgrade` 並在 UAC 對話框中選擇「是」即可繼續升級 |
+| `wifimic_client` 呼叫後回報「找不到命令」 | PATH 尚未更新（安裝後未開啟新終端機） | 關閉現有命令提示字元／PowerShell，**開啟新的**工作階段後再呼叫；或直接以完整路徑 `& 'C:\Program Files\wifimic-client\wifimic_client.exe' update` 執行 |
 
 ### 9.2 Linux 端常見失敗
 
@@ -727,7 +768,7 @@ Remove-Item -LiteralPath 'C:\Program Files\wifimic-client' -Recurse -Force
 - `deploy/linux/wifimic-server.nft` — nftables 規則集
 - `deploy/linux/update-wifimic-server.sh` — Linux 伺服器更新腳本
 - `deploy/windows/install-wifimic-client.ps1` — Windows 用戶端安裝腳本
-- `wifimic_client_updater.exe` — Windows 用戶端自更新二進位檔（安裝於 `C:\Program Files\wifimic-client\`，雙擊執行，詳見第 7 節）
+- `apps/wifimic_client/assets/update-handoff.ps1.template` — `Windows 更新移交腳本`（`Windows Update Handoff Script`）嵌入模板，由 `upgrade` 子命令寫入系統暫存目錄並透過 UAC 執行
 - `apps/wifimic_server/src/capture_types.rs` — 固定捕獲源與 `parec` 參數
 - `apps/wifimic_server/src/network.rs` — UDP 連接埠、對等端 IP、來源 IP 驗證邏輯
 - `apps/wifimic_client/src/lib.rs` — Windows 端點列舉、渲染管線

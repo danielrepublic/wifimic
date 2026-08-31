@@ -24,7 +24,11 @@
    ```
    確認 6 個成品皆已上傳：`install-wifimic-windows.ps1`、`wifimic-windows-x86_64.zip`（含 `.sha256`）、`install-wifimic-linux.sh`、`wifimic-linux-x86_64.tar.gz`（含 `.sha256`）。
 4. **實際部署（不得省略，即使本版只改了一端）**：
-   - **Windows 端**（真實用戶端機器 `192.168.0.200`）：雙擊 `C:\Program Files\wifimic-client\wifimic_client_updater.exe` 執行更新（無任何命令列參數，一律針對目前 GitHub 上的 latest release，無法指定精確標籤）。**注意**：此步驟僅能驗證「目前 GitHub 上的 latest」版本，無法像 Linux 端的 `wifimic_server upgrade --tag vX.Y.Z` 一樣指定精確標籤——兩端的驗證粒度存在此不對稱性。若該機器從未安裝過 v0.2.0（即 `wifimic_client_updater.exe` 尚不存在），必須先執行一次完整安裝流程（見 `docs/deployment.md` 第 5 節：README 一鍵安裝指令或 `install-wifimic-client.ps1`），使 `wifimic_client_updater.exe` 存在於安裝目錄後，才能改用雙擊更新。更新後依 `docs/deployment.md` 第 7.6 節驗證。
+   - **Windows 端**（真實用戶端機器 `192.168.0.200`）：於新開啟的命令提示字元中執行 `wifimic_client upgrade vX.Y.Z`，以指定精確版本標籤（`更新合約` / `Update Target`）進行升級，與 Linux 端對稱。升級後依 `docs/deployment.md` 第 7.6 節驗證。此步驟必須在真實機器上以互動式工作階段執行；以下項目**無法自動化**，必須由操作人員人工確認：
+     - Windows UAC 授權對話框確實出現（確認 `Windows 更新移交腳本` / `Windows Update Handoff Script` 提升授權機制正常）
+     - 正常升級情境：UAC 核准後，`wifimic_client status` 顯示已更新為指定版本，排程工作仍啟用且音訊串流正常
+     - UAC 拒絕情境：拒絕 UAC 提示後，確認 `C:\Program Files\wifimic-client\wifimic_client.exe` 未被修改（SHA256 不變）、排程工作狀態不變（`WindowsUpgradeAdapter` 零副作用保證）
+     - 健康確認：`wifimic_client doctor` 及 `wifimic_client status` 皆正常，`CABLE Input (VB-Audio Virtual Cable)` 端點可列舉
    - **Linux 端**（真實伺服器 `192.168.0.210`）：執行 `WIFIMIC_CONTROL_SMOKE_HELPER=<path> deploy/linux/update-wifimic-server.sh vX.Y.Z`，並依 `docs/deployment.md` 第 6.5 節驗證。
 5. **端到端人工驗證**（`docs/deployment.md` 第 8.3 節）：
    - Linux 端 `journalctl --user -u wifimic-server -f` 觀察 `parec` 讀取與 UDP 發送、控制平面 Start/Heartbeat Ack。
@@ -63,5 +67,5 @@ v0.1.0–v0.1.7 皆已手動驗證過完整部署流程；本文件將其列為�
 - `docs/deployment.md` — 完整安裝／更新／驗證步驟（本文件第 4、5 步引用其章節）
 - `docs/deployment-linux.md` — Linux 伺服器詳細部署指南
 - `.github/workflows/release.yml` — 標籤觸發的自動建置與發布流程
-- `C:\Program Files\wifimic-client\wifimic_client_updater.exe` — Windows 用戶端自更新二進位檔（安裝目錄內雙擊執行，無需外部腳本路徑）
+- `C:\Program Files\wifimic-client\wifimic_client.exe` — Windows 用戶端執行檔；透過 `wifimic_client upgrade vX.Y.Z` 子命令觸發 `Windows 更新移交腳本`（`Windows Update Handoff Script`）執行升級，詳見 `docs/deployment.md` 第 7 節
 - `deploy/linux/update-wifimic-server.sh` — Linux 伺服器更新腳本
