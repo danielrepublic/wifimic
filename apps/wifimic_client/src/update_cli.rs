@@ -158,8 +158,7 @@ mod tests {
         };
 
         // When
-        let result = run_check_update(&discovery, "v0.1.12")
-            .expect("fake check succeeds");
+        let result = run_check_update(&discovery, "v0.1.12").expect("fake check succeeds");
 
         // Then
         assert_eq!(
@@ -180,8 +179,7 @@ mod tests {
         };
 
         // When
-        let result = run_check_update(&discovery, "v0.1.12")
-            .expect("fake check succeeds");
+        let result = run_check_update(&discovery, "v0.1.12").expect("fake check succeeds");
 
         // Then
         assert!(matches!(
@@ -219,8 +217,7 @@ mod tests {
         };
 
         // When
-        let result = run_check_update(&discovery, "v0.1.12")
-            .expect("fake check succeeds");
+        let result = run_check_update(&discovery, "v0.1.12").expect("fake check succeeds");
 
         // Then
         let rendered = result.render();

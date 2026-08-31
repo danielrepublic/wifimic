@@ -69,7 +69,8 @@ fn passing_endpoints() -> Vec<String> {
 #[test]
 fn parses_the_eight_expected_firewall_fields_in_order() {
     // Given
-    let output = "wifimic-client\r\nUDP\r\n6902\r\n192.168.0.210/32\r\nInbound\r\nAny\r\nAllow\r\nTrue\r\n";
+    let output =
+        "wifimic-client\r\nUDP\r\n6902\r\n192.168.0.210/32\r\nInbound\r\nAny\r\nAllow\r\nTrue\r\n";
 
     // When
     let signature = parse_firewall_signature(output).expect("firewall signature parses");
