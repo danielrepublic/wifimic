@@ -1,4 +1,6 @@
 use std::process::{Command, Output};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use thiserror::Error;
 
@@ -47,6 +49,28 @@ pub trait TaskQuery {
     fn state(&self) -> Result<TaskState, TaskQueryError>;
 }
 
+const POLL_INTERVAL: Duration = Duration::from_millis(250);
+
+/// Waits until a task is no longer executing, bounded by `timeout`.
+///
+/// # Errors
+/// Returns [`TaskQueryError`] when a task-state query cannot be completed.
+pub fn wait_until_stopped<Q: TaskQuery>(
+    query: &Q,
+    timeout: Duration,
+) -> Result<bool, TaskQueryError> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if !query.state()?.running {
+            return Ok(true);
+        }
+        if Instant::now() >= deadline {
+            return Ok(false);
+        }
+        thread::sleep(POLL_INTERVAL);
+    }
+}
+
 /// Queries the real Windows Task Scheduler via `Get-ScheduledTask`.
 #[derive(Debug, Default)]
 pub struct NativeTaskQuery;
@@ -75,7 +99,7 @@ impl TaskQuery for NativeTaskQuery {
     }
 }
 
-fn command_output_message(output: &Output) -> String {
+pub(crate) fn command_output_message(output: &Output) -> String {
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
     if !stderr.is_empty() {
         return stderr;
@@ -111,6 +135,7 @@ fn parse_task_state_output(output: &str) -> Result<TaskState, TaskQueryError> {
     let (running, ready) = match values.next() {
         Some("Ready") => (false, true),
         Some("Running") => (true, true),
+        Some("Disabled") => (false, false),
         Some(value) => {
             return Err(TaskQueryError::Malformed {
                 operation: "get_task_state",
@@ -133,7 +158,21 @@ fn parse_task_state_output(output: &str) -> Result<TaskState, TaskQueryError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_task_state_output, TaskState};
+    use std::time::Duration;
+
+    use super::{
+        parse_task_state_output, wait_until_stopped, TaskQuery, TaskQueryError, TaskState,
+    };
+
+    struct FixedTaskQuery {
+        state: TaskState,
+    }
+
+    impl TaskQuery for FixedTaskQuery {
+        fn state(&self) -> Result<TaskState, TaskQueryError> {
+            Ok(self.state)
+        }
+    }
 
     #[test]
     fn parses_a_ready_but_not_running_task_state() {
@@ -174,6 +213,38 @@ mod tests {
     }
 
     #[test]
+    fn parses_a_disabled_task_as_stopped_and_not_ready() {
+        // Given
+        let output = "0\r\nDisabled\r\n";
+
+        // When
+        let state = parse_task_state_output(output).expect("task state parses");
+
+        // Then
+        assert_eq!(
+            state,
+            TaskState {
+                enabled: false,
+                running: false,
+                ready: false,
+            }
+        );
+    }
+
+    #[test]
+    fn disabled_task_output_satisfies_the_stopped_lifecycle_wait() {
+        // Given
+        let state = parse_task_state_output("0\r\nDisabled\r\n").expect("task state parses");
+        let query = FixedTaskQuery { state };
+
+        // When
+        let stopped = wait_until_stopped(&query, Duration::ZERO).expect("task state is queried");
+
+        // Then
+        assert!(stopped);
+    }
+
+    #[test]
     fn rejects_an_unexpected_enabled_value() {
         // Given
         let output = "maybe\r\nReady\r\n";
@@ -182,7 +253,10 @@ mod tests {
         let result = parse_task_state_output(output);
 
         // Then
-        assert!(matches!(result, Err(super::TaskQueryError::Malformed { .. })));
+        assert!(matches!(
+            result,
+            Err(super::TaskQueryError::Malformed { .. })
+        ));
     }
 
     #[test]
@@ -194,7 +268,10 @@ mod tests {
         let result = parse_task_state_output(output);
 
         // Then
-        assert!(matches!(result, Err(super::TaskQueryError::Malformed { .. })));
+        assert!(matches!(
+            result,
+            Err(super::TaskQueryError::Malformed { .. })
+        ));
     }
 
     #[test]
@@ -206,6 +283,9 @@ mod tests {
         let result = parse_task_state_output(output);
 
         // Then
-        assert!(matches!(result, Err(super::TaskQueryError::Malformed { .. })));
+        assert!(matches!(
+            result,
+            Err(super::TaskQueryError::Malformed { .. })
+        ));
     }
 }
