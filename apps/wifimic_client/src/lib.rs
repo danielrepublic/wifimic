@@ -2,8 +2,9 @@ pub mod control;
 pub mod jitter;
 pub mod render;
 pub mod task_query;
-pub mod updater;
 pub mod update_cli;
+pub mod updater;
+mod updater_archive;
 #[cfg(target_os = "windows")]
 pub mod updater_native;
 
