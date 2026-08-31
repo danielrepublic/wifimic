@@ -128,9 +128,7 @@ mod tests {
                             current: current.clone(),
                         }
                     }
-                    UpdateError::InvalidChecksumManifest => {
-                        UpdateError::InvalidChecksumManifest
-                    }
+                    UpdateError::InvalidChecksumManifest => UpdateError::InvalidChecksumManifest,
                     UpdateError::ChecksumMismatch { expected, actual } => {
                         UpdateError::ChecksumMismatch {
                             expected: expected.clone(),
