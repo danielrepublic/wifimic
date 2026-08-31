@@ -13,8 +13,6 @@ $ErrorActionPreference = 'Stop'
 
 # The parent has exited long before this deadline in the normal handoff path.
 $script:ParentExitTimeout = [TimeSpan]::FromSeconds(120)
-$script:TaskPath = '\wifimic\'
-$script:TaskName = 'wifimic-client'
 $runnerPath = Join-Path ([System.IO.Path]::GetTempPath()) ("wifimic-client-upgrade-runner-{0}.exe" -f [Guid]::NewGuid().ToString('N'))
 $exitCode = 0
 
@@ -55,19 +53,6 @@ if ($exitCode -eq 0) {
     catch {
         [Console]::Error.WriteLine("wifimic update handoff could not run temporary runner '$runnerPath': $($_.Exception.Message)")
         $exitCode = 31
-    }
-}
-
-if ($exitCode -eq 0) {
-    try {
-        $task = Get-ScheduledTask -TaskName 'wifimic-client' -TaskPath '\wifimic\' -ErrorAction Stop
-        if ($task.Settings.Enabled -and $task.State -ne 'Running') {
-            Start-ScheduledTask -TaskName 'wifimic-client' -TaskPath '\wifimic\' -ErrorAction Stop
-        }
-    }
-    catch {
-        [Console]::Error.WriteLine("wifimic update handoff could not restart scheduled task '$($script:TaskPath)$($script:TaskName)': $($_.Exception.Message)")
-        $exitCode = 40
     }
 }
 

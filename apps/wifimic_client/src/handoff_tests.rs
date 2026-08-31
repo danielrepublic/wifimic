@@ -77,7 +77,7 @@ fn handoff_template_copies_and_invokes_a_temporary_runner_for_the_release_tag() 
 }
 
 #[test]
-fn handoff_template_restarts_the_enabled_task_and_deletes_itself_last() {
+fn handoff_template_leaves_task_startup_to_the_update_transaction_and_deletes_itself_last() {
     // Given
     let template = HANDOFF_SCRIPT_TEMPLATE;
 
@@ -88,13 +88,7 @@ fn handoff_template_restarts_the_enabled_task_and_deletes_itself_last() {
         template.find("Remove-Item -LiteralPath $runnerPath -Force -ErrorAction Stop");
 
     // Then
-    assert!(
-        template.contains("Get-ScheduledTask -TaskName 'wifimic-client' -TaskPath '\\wifimic\\'")
-    );
-    assert!(
-        template.contains("Start-ScheduledTask -TaskName 'wifimic-client' -TaskPath '\\wifimic\\'")
-    );
-    assert!(template.contains("$task.Settings.Enabled -and $task.State -ne 'Running'"));
+    assert!(!template.contains("Start-ScheduledTask"));
     assert!(runner_delete.is_some());
     assert!(self_delete.is_some());
     assert!(runner_delete < self_delete);
