@@ -27,7 +27,7 @@ use crate::control::{CaptureController, ControlError, ControlPlane};
 use crate::diagnostic_capture::LatencyDiagnosticCapture;
 use crate::doctor::{run_doctor, NativeCaptureSourceQueries, NativeFirewallQueries};
 use crate::status::{run_status, NativeServiceQueries};
-use wifimic_update::{check_update_exit_code, render_check_update, run_check_update};
+use wifimic_update::check::{check_update_exit_code, render_check_update, run_check_update};
 use crate::upgrade::{LinuxUpdateAdapter, HEALTH_TIMEOUT};
 
 const WIFIMIC_SERVER_VERSION: &str = env!("WIFIMIC_SERVER_VERSION");
@@ -85,7 +85,7 @@ fn run_main() -> Result<(), MainError> {
             Ok(())
         }
         Command::Update => {
-            let result = run_check_update(WIFIMIC_SERVER_VERSION, wifimic_update::discover_latest_tag)?;
+            let result = run_check_update(WIFIMIC_SERVER_VERSION, || wifimic_update::discover_latest_tag())?;
             println!("{}", result.render("wifimic_server"));
             Ok(())
         }
