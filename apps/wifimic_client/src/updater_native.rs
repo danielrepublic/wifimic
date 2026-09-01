@@ -152,9 +152,16 @@ fn restore_task(snapshot: &TaskSnapshot) -> Result<(), String> {
         timestamp()
     ));
     let result = (|| {
-        let mut file = fs::File::create(&temporary).map_err(|error| error.to_string())?;
-        file.write_all(&task_xml_bytes(snapshot.xml()))
-            .map_err(|error| error.to_string())?;
+        {
+            let mut file = fs::File::create(&temporary).map_err(|error| error.to_string())?;
+            file.write_all(&task_xml_bytes(snapshot.xml()))
+                .map_err(|error| error.to_string())?;
+            // The write handle must close before schtasks.exe opens the same
+            // path, or Windows can reject the read with "the process cannot
+            // access the file because it is being used by another process"
+            // (observed live: this is a real Windows file-sharing race that
+            // fake-operations unit tests cannot reproduce).
+        }
         run_schtasks(
             "restore_task",
             vec![
