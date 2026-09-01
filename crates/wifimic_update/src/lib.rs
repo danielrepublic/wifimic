@@ -32,7 +32,13 @@ use std::time::Duration;
 
 use sha2::{Digest, Sha256};
 
+pub mod check;
 pub mod transaction;
+
+// allow: SIZE_OK — root API owns shared update definitions and public re-exports.
+pub use check::{
+    check_update_exit_code, render_check_update, run_check_update, CheckUpdateOutcome,
+};
 
 pub use transaction::{
     parse_update_target, resolve_action, run_update_transaction, ResolvedAction, RollbackOutcome,
