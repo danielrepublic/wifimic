@@ -5,8 +5,14 @@ artifacts/qa/
 # Local CodeGraph index (auto-generated, never committed)
 /.codegraph/
 
+# OhMyOpenCode agent workspace state (boulder, plans, drafts, evidence,
+# session continuation) — local tooling scratch space, never committed.
+/.omo/
+
 # Prevent recurrence of ad-hoc root debug-script artifacts
 /*.png
 /task_*.txt
 /cleanup-log.txt
 /uninstall-std*.txt
+/clippy_output.txt
+/test_output.txt
