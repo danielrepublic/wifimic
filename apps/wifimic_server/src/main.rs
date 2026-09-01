@@ -5,7 +5,6 @@ mod diagnostic_capture;
 mod doctor;
 mod network;
 mod status;
-mod update_cli;
 mod upgrade;
 mod upgrade_native;
 #[cfg(test)]
@@ -28,9 +27,7 @@ use crate::control::{CaptureController, ControlError, ControlPlane};
 use crate::diagnostic_capture::LatencyDiagnosticCapture;
 use crate::doctor::{run_doctor, NativeCaptureSourceQueries, NativeFirewallQueries};
 use crate::status::{run_status, NativeServiceQueries};
-use crate::update_cli::{
-    check_update_exit_code, render_check_update, run_check_update, NativeTagDiscovery,
-};
+use wifimic_update::{check_update_exit_code, render_check_update, run_check_update};
 use crate::upgrade::{LinuxUpdateAdapter, HEALTH_TIMEOUT};
 
 const WIFIMIC_SERVER_VERSION: &str = env!("WIFIMIC_SERVER_VERSION");
@@ -41,7 +38,7 @@ fn main() -> std::process::ExitCode {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(MainError::CheckUpdate(error)) => {
             let result = Err(error);
-            println!("{}", render_check_update(&result));
+            println!("{}", render_check_update(&result, "wifimic_server"));
             if check_update_exit_code(&result) == 0 {
                 std::process::ExitCode::SUCCESS
             } else {
@@ -88,8 +85,8 @@ fn run_main() -> Result<(), MainError> {
             Ok(())
         }
         Command::Update => {
-            let result = run_check_update(&NativeTagDiscovery, WIFIMIC_SERVER_VERSION)?;
-            println!("{}", result.render());
+            let result = run_check_update(WIFIMIC_SERVER_VERSION, wifimic_update::discover_latest_tag)?;
+            println!("{}", result.render("wifimic_server"));
             Ok(())
         }
         Command::Upgrade { target } => {
@@ -236,4 +233,29 @@ fn unix_micros() -> u64 {
         .map_or(0, |duration| {
             u64::try_from(duration.as_micros()).unwrap_or(u64::MAX)
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use wifimic_update::CheckUpdateOutcome;
+
+    #[test]
+    fn update_available_renders_server_literal_and_not_client() {
+        // Hand-construct UpdateAvailable — no run_main() or discover_latest_tag
+        let outcome = CheckUpdateOutcome::UpdateAvailable {
+            current: "v0.1.12".to_owned(),
+            latest: "v0.2.0".to_owned(),
+        };
+        let rendered = outcome.render("wifimic_server");
+        // Server literal present
+        assert!(
+            rendered.contains("wifimic_server"),
+            "rendered output should contain the server binary name"
+        );
+        // Client literal absent
+        assert!(
+            !rendered.contains("wifimic_client"),
+            "rendered output should not contain the client binary name"
+        );
+    }
 }
