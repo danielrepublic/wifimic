@@ -234,66 +234,6 @@ const fn task_is_healthy(state: TaskState) -> bool {
     state.enabled && state.running
 }
 
-#[cfg(test)]
-mod tests {
-    use std::cell::Cell;
-
-    use super::{stop_task_if_running, task_is_healthy};
-    use crate::task_query::{TaskQuery, TaskQueryError, TaskState};
-
-    struct RunningThenStoppedTaskQuery {
-        calls: Cell<u8>,
-    }
-
-    impl TaskQuery for RunningThenStoppedTaskQuery {
-        fn state(&self) -> Result<TaskState, TaskQueryError> {
-            let calls = self.calls.get();
-            self.calls.set(calls + 1);
-            Ok(TaskState {
-                enabled: false,
-                running: calls == 0,
-                ready: calls == 0,
-            })
-        }
-    }
-
-    #[test]
-    fn ready_task_is_not_healthy_until_it_is_running() {
-        // Given
-        let state = TaskState {
-            enabled: true,
-            running: false,
-            ready: true,
-        };
-
-        // When
-        let healthy = task_is_healthy(state);
-
-        // Then
-        assert!(!healthy);
-    }
-
-    #[test]
-    fn running_task_is_stopped_and_confirmed_before_rollback_restore() {
-        // Given
-        let query = RunningThenStoppedTaskQuery {
-            calls: Cell::new(0),
-        };
-        let stop_called = Cell::new(false);
-
-        // When
-        let stopped = stop_task_if_running(&query, || {
-            stop_called.set(true);
-            Ok(())
-        });
-
-        // Then
-        assert!(stopped);
-        assert!(stop_called.get());
-        assert_eq!(query.calls.get(), 2);
-    }
-}
-
 fn run_schtasks<I, S>(operation: &'static str, args: I) -> Result<Output, String>
 where
     I: IntoIterator<Item = S>,
@@ -359,5 +299,65 @@ fn post_swap_error(message: impl Into<String>) -> TransactionError {
 fn health_query_error(message: impl Into<String>) -> TransactionError {
     TransactionError::HealthQuery {
         message: message.into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::Cell;
+
+    use super::{stop_task_if_running, task_is_healthy};
+    use crate::task_query::{TaskQuery, TaskQueryError, TaskState};
+
+    struct RunningThenStoppedTaskQuery {
+        calls: Cell<u8>,
+    }
+
+    impl TaskQuery for RunningThenStoppedTaskQuery {
+        fn state(&self) -> Result<TaskState, TaskQueryError> {
+            let calls = self.calls.get();
+            self.calls.set(calls + 1);
+            Ok(TaskState {
+                enabled: false,
+                running: calls == 0,
+                ready: calls == 0,
+            })
+        }
+    }
+
+    #[test]
+    fn ready_task_is_not_healthy_until_it_is_running() {
+        // Given
+        let state = TaskState {
+            enabled: true,
+            running: false,
+            ready: true,
+        };
+
+        // When
+        let healthy = task_is_healthy(state);
+
+        // Then
+        assert!(!healthy);
+    }
+
+    #[test]
+    fn running_task_is_stopped_and_confirmed_before_rollback_restore() {
+        // Given
+        let query = RunningThenStoppedTaskQuery {
+            calls: Cell::new(0),
+        };
+        let stop_called = Cell::new(false);
+
+        // When
+        let stopped = stop_task_if_running(&query, || {
+            stop_called.set(true);
+            Ok(())
+        });
+
+        // Then
+        assert!(stopped);
+        assert!(stop_called.get());
+        assert_eq!(query.calls.get(), 2);
     }
 }
