@@ -46,7 +46,7 @@ fn passing_signature() -> FirewallSignature {
         display_name: "wifimic-client".to_owned(),
         protocol: "UDP".to_owned(),
         local_port: "6902".to_owned(),
-        remote_address: "192.168.0.210/32".to_owned(),
+        remote_address: "192.168.0.210".to_owned(),
         direction: "Inbound".to_owned(),
         profile: "Any".to_owned(),
         action: "Allow".to_owned(),
@@ -70,7 +70,7 @@ fn passing_endpoints() -> Vec<String> {
 fn parses_the_eight_expected_firewall_fields_in_order() {
     // Given
     let output =
-        "wifimic-client\r\nUDP\r\n6902\r\n192.168.0.210/32\r\nInbound\r\nAny\r\nAllow\r\nTrue\r\n";
+        "wifimic-client\r\nUDP\r\n6902\r\n192.168.0.210\r\nInbound\r\nAny\r\nAllow\r\nTrue\r\n";
 
     // When
     let signature = parse_firewall_signature(output).expect("firewall signature parses");

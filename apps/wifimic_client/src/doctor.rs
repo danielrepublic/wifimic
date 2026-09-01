@@ -8,7 +8,13 @@ const CLIENT_INSTALL_PATH: &str = r"C:\Program Files\wifimic-client\wifimic_clie
 const EXPECTED_FIREWALL_DISPLAY_NAME: &str = "wifimic-client";
 const EXPECTED_FIREWALL_PROTOCOL: &str = "UDP";
 const EXPECTED_FIREWALL_LOCAL_PORT: &str = "6902";
-const EXPECTED_FIREWALL_REMOTE_ADDRESS: &str = "192.168.0.210/32";
+// Windows reports a single-host `RemoteAddress` filter without a `/32`
+// suffix from `Get-NetFirewallAddressFilter`, even when the rule was
+// created with an explicit `/32` (confirmed against a live rule created by
+// `install-wifimic-client.ps1`). Matching the bare host address here avoids
+// a permanent false-negative doctor check against an otherwise correctly
+// scoped rule.
+const EXPECTED_FIREWALL_REMOTE_ADDRESS: &str = "192.168.0.210";
 const EXPECTED_FIREWALL_DIRECTION: &str = "Inbound";
 const EXPECTED_FIREWALL_PROFILE: &str = "Any";
 const EXPECTED_FIREWALL_ACTION: &str = "Allow";
