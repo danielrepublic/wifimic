@@ -1,4 +1,7 @@
-use wifimic_update::{CheckUpdateOutcome, render_check_update, UpdateTarget};
+use wifimic_update::{
+    check::{render_check_update, CheckUpdateOutcome},
+    UpdateTarget,
+};
 
 #[cfg(not(target_os = "windows"))]
 use super::dispatch;
@@ -58,16 +61,17 @@ fn internal_apply_upgrade_is_rejected_outside_windows() {
 
 #[test]
 fn client_binary_is_wifimic_client_and_not_server() {
-    // Given / When / Then: prove the rendered update check output identifies
-    // the client binary as "wifimic_client" and not "wifimic_server", without
-    // invoking dispatch( or discover_latest_tag (network).
+    // Given
     let outcome = CheckUpdateOutcome::UpdateAvailable {
         current: "v0.1.12".to_owned(),
         latest: "v0.2.0".to_owned(),
     };
     let result = Ok(outcome);
 
+    // When
     let rendered = render_check_update(&result, "wifimic_client");
-    assert!(rendered.contains("wifimic_client"));
+
+    // Then
+    assert!(rendered.contains("wifimic_client upgrade"));
     assert!(!rendered.contains("wifimic_server"));
 }
