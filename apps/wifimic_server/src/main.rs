@@ -240,17 +240,17 @@ mod tests {
     use wifimic_update::CheckUpdateOutcome;
 
     #[test]
-    fn update_available_renders_server_literal_and_not_client() {
-        // Hand-construct UpdateAvailable — no run_main() or discover_latest_tag
+    fn update_available_renders_server_upgrade_literal() {
+        // Hand-construct UpdateAvailable using shared render API
         let outcome = CheckUpdateOutcome::UpdateAvailable {
             current: "v0.1.12".to_owned(),
             latest: "v0.2.0".to_owned(),
         };
         let rendered = outcome.render("wifimic_server");
-        // Server literal present
+        // Server upgrade literal present
         assert!(
-            rendered.contains("wifimic_server"),
-            "rendered output should contain the server binary name"
+            rendered.contains("wifimic_server upgrade"),
+            "rendered output should contain the server upgrade directive"
         );
         // Client literal absent
         assert!(
