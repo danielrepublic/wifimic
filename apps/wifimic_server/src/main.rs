@@ -85,7 +85,7 @@ fn run_main() -> Result<(), MainError> {
             Ok(())
         }
         Command::Update => {
-            let result = run_check_update(WIFIMIC_SERVER_VERSION, || wifimic_update::discover_latest_tag())?;
+            let result = run_check_update(WIFIMIC_SERVER_VERSION, wifimic_update::discover_latest_tag)?;
             println!("{}", result.render("wifimic_server"));
             Ok(())
         }
