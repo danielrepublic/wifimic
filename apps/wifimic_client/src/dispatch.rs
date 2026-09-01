@@ -23,7 +23,7 @@ pub(crate) fn dispatch(command: cli::Command) -> Result<(), Box<dyn std::error::
         }
         cli::Command::Update => {
             attach_console();
-            let result = wifimic_update::run_check_update(env!("WIFIMIC_CLIENT_VERSION"), wifimic_update::discover_latest_tag);
+            let result = wifimic_update::run_check_update(env!("WIFIMIC_CLIENT_VERSION"), || wifimic_update::discover_latest_tag());
             println!(
                 "{}",
                 wifimic_update::render_check_update(&result, "wifimic_client")
