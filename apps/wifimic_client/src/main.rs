@@ -159,6 +159,51 @@ where
     }
 }
 
+/// Retries `attempt` until the injected monotonic clock reaches
+/// `max_elapsed`, waiting at most `interval` between failures. The first
+/// attempt is immediate; no real time source or sleeper is used here.
+/// Returns the final observed result, attempt count, and elapsed time.
+fn retry_bounded<T, E, N, O, W>(
+    max_elapsed: Duration,
+    interval: Duration,
+    mut now: N,
+    mut attempt: O,
+    mut wait: W,
+) -> (Result<T, E>, u32, Duration)
+where
+    N: FnMut() -> std::time::Instant,
+    O: FnMut(Duration) -> Result<T, E>,
+    W: FnMut(Duration),
+{
+    let started_at = now();
+    let mut attempts = 0_u32;
+    loop {
+        attempts += 1;
+        let remaining = max_elapsed.saturating_sub(now().saturating_duration_since(started_at));
+        match attempt(remaining) {
+            Ok(value) => {
+                return (
+                    Ok(value),
+                    attempts,
+                    now().saturating_duration_since(started_at),
+                );
+            }
+            Err(error) => {
+                let elapsed = now().saturating_duration_since(started_at);
+                if elapsed >= max_elapsed {
+                    return (Err(error), attempts, elapsed);
+                }
+                let remaining = max_elapsed.saturating_sub(elapsed);
+                wait(interval.min(remaining));
+                let elapsed_after_wait = now().saturating_duration_since(started_at);
+                if elapsed_after_wait >= max_elapsed {
+                    return (Err(error), attempts, elapsed_after_wait);
+                }
+            }
+        }
+    }
+}
+
 fn unix_micros() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

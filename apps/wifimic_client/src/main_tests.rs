@@ -1,9 +1,12 @@
+use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr};
+use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use super::control::{DatagramTransport, ReceivedDatagram};
-use super::{calibrate_transport, CalibrationCliError};
+use super::{calibrate_transport, retry_bounded, CalibrationCliError};
 use wifimic_protocol::latency::{CalibrationError, MAX_CALIBRATION_ROUND_TRIP_US};
 use wifimic_protocol::{decode_calibration, encode_calibration, CalibrationPacket};
 
@@ -109,4 +112,181 @@ fn calibration_returns_typed_error_after_ten_long_round_trips() {
         ))
     ));
     assert_eq!(transport.sent.len(), 10);
+}
+
+/// A distinguishable final-error value for the retry-bounded tests.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TestError(u32);
+
+/// A fake monotonic clock: `now()` reads the current instant and
+/// `wait(duration)` records the supplied duration, then advances the
+/// clock by that exact duration.
+struct FakeClock {
+    now: Instant,
+    waits: Vec<Duration>,
+}
+
+impl FakeClock {
+    fn new() -> Self {
+        Self {
+            now: Instant::now(),
+            waits: Vec::new(),
+        }
+    }
+}
+
+fn fake_clock() -> (
+    Rc<RefCell<FakeClock>>,
+    impl FnMut() -> Instant,
+    impl FnMut(Duration),
+) {
+    let clock = Rc::new(RefCell::new(FakeClock::new()));
+    let now = {
+        let clock = Rc::clone(&clock);
+        move || clock.borrow().now
+    };
+    let wait = {
+        let clock = Rc::clone(&clock);
+        move |duration| {
+            let mut clock = clock.borrow_mut();
+            clock.waits.push(duration);
+            clock.now += duration;
+        }
+    };
+    (clock, now, wait)
+}
+
+/// An `attempt` fake backed by canned outcomes that also records the
+/// remaining budget each call received.
+struct AttemptFake {
+    outcomes: VecDeque<Result<u32, TestError>>,
+    received_budgets: Vec<Duration>,
+}
+
+impl AttemptFake {
+    fn new(outcomes: Vec<Result<u32, TestError>>) -> Self {
+        Self {
+            outcomes: VecDeque::from(outcomes),
+            received_budgets: Vec::new(),
+        }
+    }
+
+    fn call(&mut self, remaining: Duration) -> Result<u32, TestError> {
+        self.received_budgets.push(remaining);
+        self.outcomes
+            .pop_front()
+            .expect("attempt fake has a canned outcome")
+    }
+}
+
+#[test]
+fn retry_bounded_succeeds_on_first_attempt_without_waiting() {
+    // Given
+    let (clock, now, wait) = fake_clock();
+    let mut attempt = AttemptFake::new(vec![Ok(42)]);
+
+    // When
+    let (result, attempts, elapsed) = retry_bounded(
+        Duration::from_secs(60),
+        Duration::from_secs(2),
+        now,
+        |remaining| attempt.call(remaining),
+        wait,
+    );
+
+    // Then
+    assert_eq!(result, Ok(42));
+    assert_eq!(attempts, 1);
+    assert_eq!(elapsed, Duration::ZERO);
+    assert_eq!(attempt.received_budgets, vec![Duration::from_secs(60)]);
+    assert!(clock.borrow().waits.is_empty());
+}
+
+#[test]
+fn retry_bounded_succeeds_after_bounded_failures_within_budget() {
+    // Given
+    let (clock, now, wait) = fake_clock();
+    let mut attempt = AttemptFake::new(vec![Err(TestError(1)), Err(TestError(2)), Ok(7)]);
+
+    // When
+    let (result, attempts, elapsed) = retry_bounded(
+        Duration::from_secs(60),
+        Duration::from_secs(2),
+        now,
+        |remaining| attempt.call(remaining),
+        wait,
+    );
+
+    // Then
+    assert_eq!(result, Ok(7));
+    assert_eq!(attempts, 3);
+    assert_eq!(elapsed, Duration::from_secs(4));
+    assert_eq!(
+        attempt.received_budgets,
+        vec![
+            Duration::from_secs(60),
+            Duration::from_secs(58),
+            Duration::from_secs(56),
+        ]
+    );
+    assert_eq!(
+        clock.borrow().waits,
+        vec![Duration::from_secs(2), Duration::from_secs(2)]
+    );
+}
+
+#[test]
+fn retry_bounded_exhausts_the_60_second_budget_and_returns_final_error_unchanged() {
+    // Given
+    let (clock, now, wait) = fake_clock();
+    let outcomes = (1_u32..=30).map(|i| Err(TestError(i))).collect();
+    let mut attempt = AttemptFake::new(outcomes);
+
+    // When
+    let (result, attempts, elapsed) = retry_bounded(
+        Duration::from_secs(60),
+        Duration::from_secs(2),
+        now,
+        |remaining| attempt.call(remaining),
+        wait,
+    );
+
+    // Then
+    assert_eq!(result, Err(TestError(30)));
+    assert_eq!(attempts, 30);
+    assert_eq!(elapsed, Duration::from_secs(60));
+    assert_eq!(clock.borrow().waits, vec![Duration::from_secs(2); 30]);
+}
+
+#[test]
+fn retry_bounded_caps_the_final_wait_at_the_remaining_budget() {
+    // Given
+    let (clock, now, wait) = fake_clock();
+    let mut attempt = AttemptFake::new(vec![
+        Err(TestError(1)),
+        Err(TestError(2)),
+        Err(TestError(3)),
+    ]);
+
+    // When
+    let (result, attempts, elapsed) = retry_bounded(
+        Duration::from_secs(60),
+        Duration::from_secs(25),
+        now,
+        |remaining| attempt.call(remaining),
+        wait,
+    );
+
+    // Then
+    assert_eq!(result, Err(TestError(3)));
+    assert_eq!(attempts, 3);
+    assert_eq!(elapsed, Duration::from_secs(60));
+    assert_eq!(
+        clock.borrow().waits,
+        vec![
+            Duration::from_secs(25),
+            Duration::from_secs(25),
+            Duration::from_secs(10),
+        ]
+    );
 }
