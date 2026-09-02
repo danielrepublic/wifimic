@@ -15,6 +15,7 @@ use crate::updater::{task_xml_bytes, TaskSnapshot, CLIENT_EXECUTABLE_NAME, HEALT
 const TASK_PATH: &str = r"\wifimic\wifimic-client";
 pub(crate) const CLIENT_INSTALL_PATH: &str = r"C:\Program Files\wifimic-client\wifimic_client.exe";
 const HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(250);
+const STRAY_PROCESS_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Supplies Windows-specific mechanics to the shared update transaction.
 #[derive(Debug, Default)]
@@ -68,6 +69,15 @@ impl UpdateAdapter for WindowsUpgradeAdapter {
                 return Err(pre_swap_error("scheduled task did not stop before timeout"));
             }
         }
+        // Task Scheduler's `running` flag only reflects the instance it
+        // launched and tracks. A client started outside the task (for
+        // example from Explorer) still holds a lock on the install-path
+        // executable while being invisible to `snapshot.task.running()`,
+        // which previously let `swap` proceed straight into an Access
+        // Denied failure and an automatic rollback (observed live).
+        // Detect and terminate any such stray process directly instead of
+        // trusting the scheduled task's state alone.
+        terminate_stray_client_processes().map_err(pre_swap_error)?;
         Ok(())
     }
 
@@ -121,6 +131,87 @@ where
         return true;
     }
     stop().is_ok() && wait_until_stopped(query, HEALTH_TIMEOUT).is_ok_and(|value| value)
+}
+
+/// Terminates any running `wifimic_client.exe` process other than this one.
+///
+/// Task Scheduler only tracks the instance it launched, so a process started
+/// outside the task (double-clicked, launched from the tray, or otherwise
+/// spawned under Explorer) can still hold a lock on
+/// [`CLIENT_INSTALL_PATH`] while being reported as not running. Polling
+/// after each termination attempt because a process can take a moment to
+/// release its file handle after it stops running.
+fn terminate_stray_client_processes() -> Result<(), String> {
+    let deadline = Instant::now() + STRAY_PROCESS_TIMEOUT;
+    loop {
+        let strays = list_client_process_ids()?;
+        if strays.is_empty() {
+            return Ok(());
+        }
+        for pid in &strays {
+            // Best-effort: the process may have already exited between the
+            // list and this termination attempt.
+            let _ = terminate_process(*pid);
+        }
+        if Instant::now() >= deadline {
+            return Err(format!(
+                "could not terminate stray {CLIENT_EXECUTABLE_NAME} process(es) holding the install path: {strays:?}"
+            ));
+        }
+        std::thread::sleep(HEALTH_POLL_INTERVAL);
+    }
+}
+
+fn list_client_process_ids() -> Result<Vec<u32>, String> {
+    let output = Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            &format!(
+                "(Get-CimInstance Win32_Process -Filter \"Name='{CLIENT_EXECUTABLE_NAME}'\").ProcessId"
+            ),
+        ])
+        .output()
+        .map_err(|error| format!("list_client_processes: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "list_client_processes: {}",
+            command_output_message(&output)
+        ));
+    }
+    Ok(parse_process_ids(
+        &String::from_utf8_lossy(&output.stdout),
+        std::process::id(),
+    ))
+}
+
+fn parse_process_ids(output: &str, exclude_pid: u32) -> Vec<u32> {
+    output
+        .lines()
+        .filter_map(|line| line.trim().parse::<u32>().ok())
+        .filter(|pid| *pid != exclude_pid)
+        .collect()
+}
+
+fn terminate_process(pid: u32) -> Result<(), String> {
+    let output = Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            &format!("Stop-Process -Id {pid} -Force -ErrorAction Stop"),
+        ])
+        .output()
+        .map_err(|error| format!("terminate_process({pid}): {error}"))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "terminate_process({pid}): {}",
+            command_output_message(&output)
+        ))
+    }
 }
 
 fn task_snapshot() -> Result<TaskSnapshot, TransactionError> {
@@ -306,7 +397,7 @@ fn health_query_error(message: impl Into<String>) -> TransactionError {
 mod tests {
     use std::cell::Cell;
 
-    use super::{stop_task_if_running, task_is_healthy};
+    use super::{parse_process_ids, stop_task_if_running, task_is_healthy};
     use crate::task_query::{TaskQuery, TaskQueryError, TaskState};
 
     struct RunningThenStoppedTaskQuery {
@@ -359,5 +450,53 @@ mod tests {
         assert!(stopped);
         assert!(stop_called.get());
         assert_eq!(query.calls.get(), 2);
+    }
+
+    #[test]
+    fn parses_no_process_ids_from_empty_output() {
+        // Given
+        let output = "";
+
+        // When
+        let ids = parse_process_ids(output, 1234);
+
+        // Then
+        assert_eq!(ids, Vec::<u32>::new());
+    }
+
+    #[test]
+    fn parses_multiple_process_ids_from_powershell_output() {
+        // Given
+        let output = "4242\r\n9001\r\n";
+
+        // When
+        let ids = parse_process_ids(output, 1234);
+
+        // Then
+        assert_eq!(ids, vec![4242, 9001]);
+    }
+
+    #[test]
+    fn excludes_the_current_process_id() {
+        // Given
+        let output = "4242\r\n1234\r\n9001\r\n";
+
+        // When
+        let ids = parse_process_ids(output, 1234);
+
+        // Then
+        assert_eq!(ids, vec![4242, 9001]);
+    }
+
+    #[test]
+    fn ignores_blank_and_non_numeric_lines() {
+        // Given
+        let output = "\r\n4242\r\n\r\n";
+
+        // When
+        let ids = parse_process_ids(output, 1234);
+
+        // Then
+        assert_eq!(ids, vec![4242]);
     }
 }
