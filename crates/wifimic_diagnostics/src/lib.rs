@@ -10,7 +10,7 @@ pub use log_sink::{LogEventSink, WifimicLogSink};
 pub use sink::{EventCollector, EventContext, EventSink, RateLimiter};
 pub use types::{
     BufferOperation, ConnectionState, ControlMessageKind, ControlRejectionReason, ErrorClass,
-    EventRecord, SessionStopReason,
+    EventRecord, RenderStartupFailureClass, SessionStopReason,
 };
 
 #[cfg(test)]
@@ -48,6 +48,14 @@ mod tests {
                 },
                 EventType::SessionStopped,
             ),
+            (
+                Event::RenderStartupRetryExhausted {
+                    attempt_count: 30,
+                    elapsed_ms: 60_000,
+                    failure_class: super::RenderStartupFailureClass::EndpointNotFound,
+                },
+                EventType::RenderStartupRetryExhausted,
+            ),
         ];
 
         // When
@@ -61,7 +69,33 @@ mod tests {
             assert!(!formatted.contains("payload"));
             assert!(!formatted.contains("samples"));
             assert!(!formatted.contains("audio_content"));
+            assert!(!formatted.contains("CABLE Input"));
+            assert!(!formatted.contains("hresult"));
         }
+    }
+
+    #[test]
+    fn render_startup_retry_exhausted_record_renders_metadata_only() {
+        // Given
+        let record = super::EventRecord::new(
+            0,
+            None,
+            Event::RenderStartupRetryExhausted {
+                attempt_count: 30,
+                elapsed_ms: 60_000,
+                failure_class: super::RenderStartupFailureClass::EndpointNotFound,
+            },
+        );
+
+        // When
+        let formatted = record.to_string();
+
+        // Then
+        assert!(formatted
+            .contains("attempt_count=30 elapsed_ms=60000 failure_class=endpoint_not_found"));
+        assert!(!formatted.contains("CABLE Input (VB-Audio Virtual Cable)"));
+        assert!(!formatted.contains("hresult"));
+        assert_eq!(record.event_type, EventType::RenderStartupRetryExhausted);
     }
 
     #[test]

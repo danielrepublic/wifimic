@@ -66,6 +66,34 @@ impl From<std::io::ErrorKind> for ErrorClass {
     }
 }
 
+/// A safe coarse classification of a Windows client render-startup
+/// failure. Contains no endpoint name or WASAPI error text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RenderStartupFailureClass {
+    /// The configured VB-CABLE endpoint was not enumerated at all
+    /// (likely uninstalled or renamed).
+    EndpointNotFound,
+    /// A WASAPI/COM-level failure (driver or audio-subsystem problem).
+    WasapiFailure,
+    /// The renderer's worker thread could not start, panicked, or
+    /// reported a poisoned/failed state.
+    WorkerFailure,
+    /// Any other `RenderError` variant.
+    Other,
+}
+
+impl Display for RenderStartupFailureClass {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        let name = match self {
+            Self::EndpointNotFound => "endpoint_not_found",
+            Self::WasapiFailure => "wasapi_failure",
+            Self::WorkerFailure => "worker_failure",
+            Self::Other => "other",
+        };
+        formatter.write_str(name)
+    }
+}
+
 /// The control message kind that was rejected by a later control-plane state machine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ControlMessageKind {

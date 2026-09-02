@@ -2,7 +2,7 @@ use std::fmt::{self, Display, Formatter};
 
 use super::types::{
     BufferOperation, ConnectionState, ControlMessageKind, ControlRejectionReason, ErrorClass,
-    SessionStopReason,
+    RenderStartupFailureClass, SessionStopReason,
 };
 
 /// The bounded set of diagnostic event classifications shared by both processes.
@@ -24,6 +24,7 @@ pub enum EventType {
     SessionStopped,
     ControlMessageRejected,
     ClockInstabilityWarning,
+    RenderStartupRetryExhausted,
 }
 
 impl Display for EventType {
@@ -45,6 +46,7 @@ impl Display for EventType {
             Self::SessionStopped => "session_stopped",
             Self::ControlMessageRejected => "control_message_rejected",
             Self::ClockInstabilityWarning => "clock_instability_warning",
+            Self::RenderStartupRetryExhausted => "render_startup_retry_exhausted",
         };
         formatter.write_str(name)
     }
@@ -119,6 +121,11 @@ pub enum Event {
         previous_offset_us: i64,
         new_offset_us: i64,
     },
+    RenderStartupRetryExhausted {
+        attempt_count: u32,
+        elapsed_ms: u64,
+        failure_class: RenderStartupFailureClass,
+    },
 }
 
 impl Event {
@@ -142,6 +149,7 @@ impl Event {
             Self::SessionStopped { .. } => EventType::SessionStopped,
             Self::ControlMessageRejected { .. } => EventType::ControlMessageRejected,
             Self::ClockInstabilityWarning { .. } => EventType::ClockInstabilityWarning,
+            Self::RenderStartupRetryExhausted { .. } => EventType::RenderStartupRetryExhausted,
         }
     }
 
@@ -241,6 +249,14 @@ impl Display for Event {
             } => write!(
                 formatter,
                 "previous_offset_us={previous_offset_us} new_offset_us={new_offset_us}"
+            ),
+            Self::RenderStartupRetryExhausted {
+                attempt_count,
+                elapsed_ms,
+                failure_class,
+            } => write!(
+                formatter,
+                "attempt_count={attempt_count} elapsed_ms={elapsed_ms} failure_class={failure_class}"
             ),
         }
     }

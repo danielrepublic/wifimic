@@ -22,6 +22,7 @@ impl EventSink for WifimicLogSink {
             Event::RenderEventTimeout { .. } | Event::JitterBufferLockPoisoned { .. } => {
                 Level::Error
             }
+            Event::RenderStartupRetryExhausted { .. } => Level::Error,
             Event::ReorderedRepair { .. }
             | Event::ConnectionTransition { .. }
             | Event::PrefillStart { .. }
