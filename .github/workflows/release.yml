@@ -14,6 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: cargo build --release --locked -p wifimic_client
+      - run: cargo test --locked -p wifimic_client -p wifimic_diagnostics
       - shell: pwsh
         run: |
           $stage = 'dist/windows'
@@ -68,4 +69,4 @@ jobs:
           dist/install-wifimic-linux.sh
           dist/wifimic-linux-x86_64.tar.gz
           dist/wifimic-linux-x86_64.tar.gz.sha256
-          --generate-notes --title "$GITHUB_REF_NAME"
+          --generate-notes --title "$GITHUB_REF_NAME" --prerelease
