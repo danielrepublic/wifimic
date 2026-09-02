@@ -38,6 +38,8 @@ pub enum RenderError {
     WorkerStopped,
     #[error("render worker could not be started")]
     WorkerStartupFailed,
+    #[error("render worker startup timed out after {startup_timeout_ms}ms")]
+    WorkerStartupTimedOut { startup_timeout_ms: u32 },
     #[error("render worker thread could not be spawned: {source}")]
     WorkerSpawn {
         #[source]
@@ -79,6 +81,34 @@ pub(crate) fn select_endpoint_index(
             expected: expected.to_owned(),
             available: available.iter().map(|name| (*name).to_owned()).collect(),
         })
+}
+
+/// Coarsely classifies a startup `RenderError` for the retry-exhaustion
+/// diagnostic event. Never exposes endpoint names or driver error text.
+///
+/// Consumed only by the binary target's startup-retry path (`main.rs`),
+/// which re-declares this module; the library target alone never calls it.
+#[must_use]
+#[allow(dead_code)]
+pub(crate) fn classify_render_startup_failure(
+    error: &RenderError,
+) -> wifimic_diagnostics::RenderStartupFailureClass {
+    use wifimic_diagnostics::RenderStartupFailureClass;
+    match error {
+        RenderError::EndpointNotFound { .. } => RenderStartupFailureClass::EndpointNotFound,
+        #[cfg(target_os = "windows")]
+        RenderError::Wasapi { .. } | RenderError::ComInitialization { .. } => {
+            RenderStartupFailureClass::WasapiFailure
+        }
+        RenderError::WorkerSpawn { .. }
+        | RenderError::WorkerPanicked
+        | RenderError::WorkerStopped
+        | RenderError::WorkerStartupTimedOut { .. }
+        | RenderError::WorkerStartupFailed
+        | RenderError::WorkerStatePoisoned
+        | RenderError::WorkerFailed { .. } => RenderStartupFailureClass::WorkerFailure,
+        _ => RenderStartupFailureClass::Other,
+    }
 }
 
 /// Fixed software playback gain applied to every captured PCM sample.

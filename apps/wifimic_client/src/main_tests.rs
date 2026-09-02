@@ -6,7 +6,9 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use super::control::{DatagramTransport, ReceivedDatagram};
-use super::{calibrate_transport, retry_bounded, CalibrationCliError};
+use super::{
+    calibrate_transport, emit_render_startup_retry_exhausted, retry_bounded, CalibrationCliError,
+};
 use wifimic_protocol::latency::{CalibrationError, MAX_CALIBRATION_ROUND_TRIP_US};
 use wifimic_protocol::{decode_calibration, encode_calibration, CalibrationPacket};
 
@@ -289,4 +291,55 @@ fn retry_bounded_caps_the_final_wait_at_the_remaining_budget() {
             Duration::from_secs(10),
         ]
     );
+}
+
+#[test]
+fn emit_render_startup_retry_exhausted_records_one_structured_event() {
+    // Given
+    let collector = wifimic_diagnostics::EventCollector::new();
+    let context = wifimic_diagnostics::EventContext::new(Instant::now(), collector.clone());
+    let error = super::render::RenderError::EndpointNotFound {
+        expected: "x".to_owned(),
+        available: Vec::new(),
+    };
+
+    // When
+    emit_render_startup_retry_exhausted(
+        &context,
+        Instant::now(),
+        30,
+        Duration::from_secs(60),
+        &error,
+    );
+
+    // Then
+    let records = collector.records();
+    assert_eq!(records.len(), 1);
+    assert!(matches!(
+        records[0].event,
+        wifimic_diagnostics::Event::RenderStartupRetryExhausted {
+            attempt_count: 30,
+            elapsed_ms: 60_000,
+            failure_class: wifimic_diagnostics::RenderStartupFailureClass::EndpointNotFound,
+        }
+    ));
+}
+
+#[test]
+fn windows_startup_emits_exhaustion_only_from_the_open_error_arm() {
+    // Given
+    let source = include_str!("main.rs");
+    let run_windows_client = &source[source
+        .find("fn run_windows_client(")
+        .expect("Windows startup function is present")..];
+
+    // When
+    let emission_count = run_windows_client
+        .matches("emit_render_startup_retry_exhausted(")
+        .count();
+
+    // Then
+    assert_eq!(emission_count, 1);
+    assert!(run_windows_client
+        .contains("Err(error) => {\n            emit_render_startup_retry_exhausted("));
 }

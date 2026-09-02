@@ -204,6 +204,25 @@ where
     }
 }
 
+/// Emits the retry-exhaustion diagnostic for a failed renderer startup.
+/// Not `cfg`-gated so it is cross-platform testable.
+fn emit_render_startup_retry_exhausted(
+    diagnostics: &wifimic_diagnostics::EventContext,
+    now: std::time::Instant,
+    attempts: u32,
+    elapsed: Duration,
+    error: &render::RenderError,
+) {
+    diagnostics.emit(
+        now,
+        wifimic_diagnostics::Event::RenderStartupRetryExhausted {
+            attempt_count: attempts,
+            elapsed_ms: u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX),
+            failure_class: render::classify_render_startup_failure(error),
+        },
+    );
+}
+
 fn unix_micros() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -217,7 +236,14 @@ fn unix_micros() -> u64 {
 mod tests;
 
 #[cfg(target_os = "windows")]
-fn run_windows_client() -> Result<(), Box<dyn std::error::Error>> {
+const RENDER_OPEN_RETRY_INTERVAL: Duration = Duration::from_secs(2);
+#[cfg(target_os = "windows")]
+const RENDER_OPEN_RETRY_BUDGET: Duration = Duration::from_secs(60);
+
+#[cfg(target_os = "windows")]
+fn run_windows_client(
+    diagnostic_sink: logging::DiagnosticLogSink,
+) -> Result<(), Box<dyn std::error::Error>> {
     use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
     use control::{ControlPlane, InboundOutcome, UdpClientSocket};
@@ -226,8 +252,28 @@ fn run_windows_client() -> Result<(), Box<dyn std::error::Error>> {
 
     let tray = tray::TrayRuntime::new()?;
     let origin = Instant::now();
+    let diagnostics = wifimic_diagnostics::EventContext::new(origin, diagnostic_sink);
     let socket = UdpClientSocket::bind()?;
-    let renderer = Renderer::open(RenderConfig::vb_cable())?;
+    let (open_result, attempts, elapsed) = retry_bounded(
+        RENDER_OPEN_RETRY_BUDGET,
+        RENDER_OPEN_RETRY_INTERVAL,
+        std::time::Instant::now,
+        |remaining| Renderer::open_with_startup_timeout(RenderConfig::vb_cable(), remaining),
+        std::thread::sleep,
+    );
+    let renderer = match open_result {
+        Ok(renderer) => renderer,
+        Err(error) => {
+            emit_render_startup_retry_exhausted(
+                &diagnostics,
+                std::time::Instant::now(),
+                attempts,
+                elapsed,
+                &error,
+            );
+            return Err(error.into());
+        }
+    };
     let mut control = ControlPlane::new(socket, renderer, origin);
     let epoch_ms = || {
         SystemTime::now()

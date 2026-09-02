@@ -36,6 +36,62 @@ fn render_missing_endpoint_never_falls_back_to_first_endpoint() {
 }
 
 #[test]
+fn render_startup_failure_classification_is_safe_and_coarse() {
+    use wifimic_diagnostics::RenderStartupFailureClass;
+
+    let endpoint = RenderError::EndpointNotFound {
+        expected: "CABLE Input (VB-Audio Virtual Cable)".to_owned(),
+        available: vec!["Speakers".to_owned()],
+    };
+    assert_eq!(
+        classify_render_startup_failure(&endpoint),
+        RenderStartupFailureClass::EndpointNotFound
+    );
+
+    let worker_errors = [
+        RenderError::WorkerSpawn {
+            source: std::io::Error::other("spawn"),
+        },
+        RenderError::WorkerPanicked,
+        RenderError::WorkerStopped,
+        RenderError::WorkerStartupTimedOut {
+            startup_timeout_ms: 60_000,
+        },
+        RenderError::WorkerStartupFailed,
+        RenderError::WorkerStatePoisoned,
+        RenderError::WorkerFailed {
+            details: "boom".to_owned(),
+        },
+    ];
+    for error in worker_errors {
+        assert_eq!(
+            classify_render_startup_failure(&error),
+            RenderStartupFailureClass::WorkerFailure,
+            "worker error {error:?} must classify as WorkerFailure"
+        );
+    }
+
+    let other_errors = [
+        RenderError::InvalidEndpointName,
+        RenderError::InvalidEventWaitTimeout,
+        RenderError::EventWaitTimeout { wait_timeout_ms: 1 },
+        RenderError::QueueFull { capacity_frames: 4 },
+        RenderError::BufferSizeOverflow {
+            frames: 480,
+            bytes_per_frame: 4,
+        },
+        RenderError::UnsupportedPlatform,
+    ];
+    for error in other_errors {
+        assert_eq!(
+            classify_render_startup_failure(&error),
+            RenderStartupFailureClass::Other,
+            "non-startup error {error:?} must classify as Other"
+        );
+    }
+}
+
+#[test]
 fn render_empty_endpoint_name_is_invalid_configuration() {
     let error = RenderConfig::new("").expect_err("empty endpoint name must fail");
 

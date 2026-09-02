@@ -11,6 +11,7 @@ pub use endpoints::enumerate_render_endpoints;
 
 use std::sync::{mpsc, Arc};
 use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
 use wifimic_protocol::AudioFrame;
 
@@ -26,6 +27,26 @@ pub struct Renderer {
 impl Renderer {
     /// Starts a dedicated event-driven worker for the exact configured endpoint.
     pub fn open(config: RenderConfig) -> Result<Self, RenderError> {
+        Self::open_impl(config, None)
+    }
+
+    /// Starts the worker with a bounded startup-receive window so a stalled
+    /// `RenderStream::open` cannot block the caller's retry budget.
+    ///
+    /// Consumed only by the binary target's startup-retry path (`main.rs`),
+    /// which re-declares this module; the library target alone never calls it.
+    #[allow(dead_code)]
+    pub(crate) fn open_with_startup_timeout(
+        config: RenderConfig,
+        startup_timeout: Duration,
+    ) -> Result<Self, RenderError> {
+        Self::open_impl(config, Some(startup_timeout))
+    }
+
+    fn open_impl(
+        config: RenderConfig,
+        startup_timeout: Option<Duration>,
+    ) -> Result<Self, RenderError> {
         let queue = Arc::new(std::sync::Mutex::new(worker::RenderQueue::new()));
         let (startup_sender, startup_receiver) = mpsc::sync_channel(1);
         let worker_queue = Arc::clone(&queue);
@@ -33,7 +54,13 @@ impl Renderer {
             .name("wifimic-wasapi-render".to_owned())
             .spawn(move || worker::run(config, worker_queue, startup_sender))
             .map_err(|source| RenderError::WorkerSpawn { source })?;
-        match startup_receiver.recv() {
+        let startup_result = match startup_timeout {
+            Some(timeout) => startup_receiver.recv_timeout(timeout),
+            None => startup_receiver
+                .recv()
+                .map_err(|_| mpsc::RecvTimeoutError::Disconnected),
+        };
+        match startup_result {
             Ok(Ok(())) => Ok(Self {
                 queue,
                 worker: Some(handle),
@@ -43,7 +70,11 @@ impl Renderer {
                 Ok(_) => Err(error),
                 Err(_) => Err(RenderError::WorkerPanicked),
             },
-            Err(_) => match handle.join() {
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                drop(handle);
+                Err(worker_startup_timed_out(&queue, startup_timeout))
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => match handle.join() {
                 Ok(_) => Err(RenderError::WorkerStartupFailed),
                 Err(_) => Err(RenderError::WorkerPanicked),
             },
@@ -103,5 +134,47 @@ impl Drop for Renderer {
                 let _ = handle.join();
             }
         }
+    }
+}
+
+/// Stops a worker whose startup result exceeded its bounded receive window.
+fn worker_startup_timed_out(
+    queue: &worker::SharedQueue,
+    startup_timeout: Option<Duration>,
+) -> RenderError {
+    let _ = queue.lock().map(|mut state| state.shutdown = true);
+    RenderError::WorkerStartupTimedOut {
+        startup_timeout_ms: startup_timeout.map_or(u32::MAX, |timeout| {
+            u32::try_from(timeout.as_millis()).unwrap_or(u32::MAX)
+        }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn worker_startup_timeout_sets_shutdown_without_a_join_handle() {
+        // Given
+        let queue = Arc::new(std::sync::Mutex::new(worker::RenderQueue::new()));
+        let (_sender, receiver) = mpsc::sync_channel::<()>(1);
+
+        // When
+        let receive_result = receiver.recv_timeout(Duration::ZERO);
+        let error = worker_startup_timed_out(&queue, Some(Duration::ZERO));
+
+        // Then
+        assert!(matches!(
+            receive_result,
+            Err(mpsc::RecvTimeoutError::Timeout)
+        ));
+        assert!(matches!(
+            error,
+            RenderError::WorkerStartupTimedOut {
+                startup_timeout_ms: 0
+            }
+        ));
+        assert!(queue.lock().expect("test queue lock").shutdown);
     }
 }

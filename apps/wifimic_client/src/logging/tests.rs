@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use super::errors::{Clock, RotationSkipReason, RotationWarning};
 use super::rotation::rotate_logs_at;
@@ -200,4 +200,37 @@ fn diagnostic_sink_accepts_only_typed_metadata_records() {
     assert!(!contents.contains("pcm"));
     assert!(!contents.contains("payload"));
     assert!(!contents.contains("samples"));
+}
+
+#[test]
+fn diagnostic_sink_persists_render_startup_retry_exhausted_event() {
+    // Given
+    let directory = TestDirectory::new();
+    let sink = DiagnosticLogSink::open(
+        &directory.path,
+        FixedClock::new(UNIX_EPOCH + Duration::from_secs(1_000_000)),
+    )
+    .expect("open diagnostic sink");
+    let context = wifimic_diagnostics::EventContext::new(Instant::now(), sink);
+
+    // When
+    context.emit(
+        Instant::now(),
+        wifimic_diagnostics::Event::RenderStartupRetryExhausted {
+            attempt_count: 30,
+            elapsed_ms: 60_000,
+            failure_class: wifimic_diagnostics::RenderStartupFailureClass::EndpointNotFound,
+        },
+    );
+
+    // Then
+    let log_path = fs::read_dir(&directory.path)
+        .expect("read test log directory")
+        .next()
+        .expect("diagnostic log exists")
+        .expect("read diagnostic entry")
+        .path();
+    let contents = fs::read_to_string(log_path).expect("read diagnostic log");
+    assert!(contents.contains("event=render_startup_retry_exhausted"));
+    assert!(contents.contains("attempt_count=30 elapsed_ms=60000 failure_class=endpoint_not_found"));
 }

@@ -1,44 +1,9 @@
-use wifimic_update::{
-    check::{render_check_update, CheckUpdateOutcome},
-    UpdateTarget,
-};
+use wifimic_update::check::{render_check_update, CheckUpdateOutcome};
 
 #[cfg(not(target_os = "windows"))]
 use super::dispatch;
-use super::requires_diagnostics;
+#[cfg(not(target_os = "windows"))]
 use crate::cli;
-
-#[test]
-fn only_run_audio_requires_diagnostics_initialization() {
-    // Given
-    let cases = [
-        (cli::Command::RunAudio, true),
-        (cli::Command::Update, false),
-        (cli::Command::Status, false),
-        (cli::Command::Doctor, false),
-        (
-            cli::Command::Upgrade {
-                target: UpdateTarget::Latest,
-            },
-            false,
-        ),
-        (
-            cli::Command::InternalApplyUpgrade {
-                tag: "v1.2.3".to_owned(),
-            },
-            false,
-        ),
-    ];
-
-    // When / Then
-    for (command, expected) in cases {
-        assert_eq!(
-            requires_diagnostics(&command),
-            expected,
-            "diagnostics requirement for {command:?}"
-        );
-    }
-}
 
 #[cfg(not(target_os = "windows"))]
 #[test]
