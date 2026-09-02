@@ -51,6 +51,13 @@ try {
     $initialPath = 'C:\Tools;C:\Program Files\wifimic-client-tools;C:\Windows\System32'
     $inserted = Invoke-FakeInstaller -Source $source -StateRoot (Join-Path $testRoot 'path-insertion') -MachinePath $initialPath
     Assert-Equal $inserted.ExitCode 0 'TestMode PATH insertion should succeed.'
+    Assert-Equal $inserted.Result.LogonStartupDelay 'PT30S' 'TestMode install must delay the client until Windows audio services are ready after logon.'
+    [xml]$taskXml = $inserted.Result.FakeTaskXml
+    $taskNamespace = New-Object System.Xml.XmlNamespaceManager($taskXml.NameTable)
+    $taskNamespace.AddNamespace('task', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
+    $startupDelay = $taskXml.SelectSingleNode('//task:Triggers/task:LogonTrigger/task:Delay', $taskNamespace)
+    Assert-True ($null -ne $startupDelay) 'TestMode task must contain a logon startup delay.'
+    Assert-Equal $startupDelay.InnerText 'PT30S' 'TestMode task must wait 30 seconds after logon before starting the client.'
     Assert-Equal $inserted.Result.FakeMachinePath "$initialPath;C:\Program Files\wifimic-client" 'TestMode should append the client directory to machine PATH.'
     Assert-True (@($inserted.Result.FakeEvents) -contains 'SetMachinePath') 'TestMode should record the machine PATH write.'
     Assert-True (@($inserted.Result.FakeEvents) -contains 'BroadcastEnvironmentChange') 'TestMode should record the environment broadcast.'

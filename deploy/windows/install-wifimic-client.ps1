@@ -27,6 +27,7 @@ $script:CanonicalPeer = '192.168.0.210/32'
 $script:CanonicalPort = '6902'
 $script:CanonicalEndpoint = 'CABLE Input (VB-Audio Virtual Cable)'
 $script:CanonicalMarkerFileName = 'test.md'
+$script:LogonStartupDelay = 'PT30S'
 
 function New-WifimicInstallerException {
     [CmdletBinding()]
@@ -169,6 +170,7 @@ function New-WifimicTaskXml {
   <Triggers>
     <LogonTrigger>
       <Enabled>true</Enabled>
+      <Delay>$script:LogonStartupDelay</Delay>
     </LogonTrigger>
   </Triggers>
   <Principals>
@@ -249,6 +251,10 @@ function Test-WifimicTaskDefinition {
     $trigger = Get-WifimicTaskXmlNode -Xml $xml -XPath '//task:Triggers/task:LogonTrigger'
     if ($trigger.LocalName -ne 'LogonTrigger') {
         Throw-WifimicInstallerError -Code 'TaskContractMismatch' -Message 'The task must use a LogonTrigger.'
+    }
+    $delay = Get-WifimicTaskXmlNode -Xml $xml -XPath '//task:Triggers/task:LogonTrigger/task:Delay'
+    if (-not [string]::Equals($delay.InnerText, $script:LogonStartupDelay, [System.StringComparison]::Ordinal)) {
+        Throw-WifimicInstallerError -Code 'TaskContractMismatch' -Message "The task must delay logon startup by '$($script:LogonStartupDelay)'."
     }
     $principal = Get-WifimicTaskXmlNode -Xml $xml -XPath '//task:Principals/task:Principal'
     $logonType = (Get-WifimicTaskXmlNode -Xml $xml -XPath '//task:Principals/task:Principal/task:LogonType').InnerText
@@ -622,6 +628,7 @@ function Invoke-WifimicInstall {
                 Port = $identity.Port
                 Endpoint = $identity.Endpoint
                 LogonTrigger = 'LogonTrigger'
+                LogonStartupDelay = $script:LogonStartupDelay
                 LogonType = 'InteractiveToken'
                 MachinePathWouldChange = $machinePathPlan.Changed
                 MachinePath = $machinePathPlan.Path
@@ -699,6 +706,7 @@ function Invoke-WifimicInstall {
             Port = $firewall.LocalPort
             Endpoint = $identity.Endpoint
             LogonTrigger = 'LogonTrigger'
+            LogonStartupDelay = $script:LogonStartupDelay
             LogonType = 'InteractiveToken'
             MachinePathChanged = $machinePathPlan.Changed
             MachinePath = $machinePathPlan.Path
@@ -1040,6 +1048,7 @@ function Add-WifimicFakeStateToResult {
     $state = Invoke-WifimicOperation -Operations $Operations -Name 'GetState'
     $legacyUpdater = Invoke-WifimicOperation -Operations $Operations -Name 'CaptureFile' -Arguments @($Identity.LegacyUpdaterPath)
     $Result | Add-Member -NotePropertyName FakeTask -NotePropertyValue ($(if ($null -ne $state.Task) { $state.Task.TaskPath } else { $null }))
+    $Result | Add-Member -NotePropertyName FakeTaskXml -NotePropertyValue ($(if ($null -ne $state.Task) { $state.Task.XmlText } else { $null }))
     $Result | Add-Member -NotePropertyName FakeFirewall -NotePropertyValue ($(if ($null -ne $state.Firewall) { $state.Firewall.DisplayName } else { $null }))
     $Result | Add-Member -NotePropertyName FakeInstallRoot -NotePropertyValue $script:CanonicalInstallRoot
     $Result | Add-Member -NotePropertyName FakeMachinePath -NotePropertyValue $state.MachinePath
