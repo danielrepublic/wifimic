@@ -86,7 +86,7 @@ impl UpdateAdapter for WindowsUpgradeAdapter {
     }
 
     fn post_swap(&mut self, snapshot: &Self::Snapshot) -> Result<(), TransactionError> {
-        restore_task(&snapshot.task).map_err(post_swap_error)?;
+        restore_task(&snapshot.task.with_logon_startup_delay()).map_err(post_swap_error)?;
         if snapshot.task.enabled() {
             start_task().map_err(post_swap_error)?;
         }
