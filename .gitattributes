@@ -1,0 +1,7 @@
+# Force LF line endings for all text files across the repo.
+# This overrides the machine-level `core.autocrlf=true` setting which
+# would otherwise checkout git blobs as CRLF, ensuring `cargo fmt --check`
+# and other tools see consistent Unix-style (LF) line endings regardless
+# of the local git configuration. Matches `rustfmt.toml`'s
+# `newline_style = "Unix"`.
+* text=auto eol=lf
