@@ -32,6 +32,11 @@ use wifimic_update::check::{check_update_exit_code, render_check_update, run_che
 
 const WIFIMIC_SERVER_VERSION: &str = env!("WIFIMIC_SERVER_VERSION");
 const RECEIVE_POLL_INTERVAL: Duration = Duration::from_millis(1);
+/// Interval between server socket bind retries at startup.
+const BIND_RETRY_INTERVAL: Duration = Duration::from_secs(2);
+/// Maximum bind attempts before giving up to systemd (≈60s: covers boot
+/// races and short Wi-Fi flaps without masking real config errors forever).
+const BIND_RETRY_ATTEMPTS: u32 = 30;
 
 fn main() -> std::process::ExitCode {
     match run_main() {
@@ -155,7 +160,12 @@ fn run_server<C>(capture: C) -> io::Result<()>
 where
     C: CaptureController,
 {
-    let mut socket = network::UdpServerSocket::bind()?;
+    let mut socket = bind_server_socket()?;
+    eprintln!(
+        "server listening on {} (environment address {})",
+        network::wildcard_bind_address(),
+        network::server_bind_address()
+    );
     let diagnostics = EventContext::logging(Instant::now());
     let mut control = ControlPlane::new(capture, diagnostics);
     let mut peer: Option<SocketAddr> = None;
@@ -224,6 +234,37 @@ where
                 socket.send_to(&encode_audio_frame(&frame), destination)?;
                 sequence = sequence.wrapping_add(1);
             }
+        }
+    }
+}
+
+/// Binds the server UDP socket, retrying transient failures in-process.
+///
+/// A fixed-address bind used to turn a seconds-long Wi-Fi flap
+/// (`EADDRNOTAVAIL`) into a process exit, which systemd's
+/// `StartLimitBurst=3` then escalated into a permanent `start-limit-hit`.
+/// Only address/port conflicts are retried (up to `BIND_RETRY_ATTEMPTS`);
+/// any other I/O error (e.g. permission denied) is returned immediately so
+/// real misconfigurations stay loud instead of being masked by retries.
+fn bind_server_socket() -> io::Result<network::UdpServerSocket> {
+    let mut attempts = 0_u32;
+    loop {
+        match network::UdpServerSocket::bind() {
+            Ok(socket) => return Ok(socket),
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    io::ErrorKind::AddrNotAvailable | io::ErrorKind::AddrInUse
+                ) && attempts + 1 < BIND_RETRY_ATTEMPTS =>
+            {
+                attempts += 1;
+                eprintln!(
+                    "server bind attempt {attempts}/{BIND_RETRY_ATTEMPTS} failed ({error}); retrying in {}s",
+                    BIND_RETRY_INTERVAL.as_secs()
+                );
+                std::thread::sleep(BIND_RETRY_INTERVAL);
+            }
+            Err(error) => return Err(error),
         }
     }
 }
