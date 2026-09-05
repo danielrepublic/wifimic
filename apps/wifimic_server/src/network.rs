@@ -9,9 +9,27 @@ pub const LINUX_SERVER_IP: Ipv4Addr = Ipv4Addr::new(192, 168, 0, 210);
 const MAX_DATAGRAM_BYTES: usize = u16::MAX as usize;
 
 /// Returns the exact local address that owns WiFiMic's outbound UDP source IP.
+///
+/// Kept as the documented environment address (firewall rules and deployment
+/// docs reference it). The server socket itself binds the wildcard address
+/// below so a transient loss of this address does not kill the service.
 #[must_use]
 pub const fn server_bind_address() -> SocketAddr {
     SocketAddr::V4(SocketAddrV4::new(LINUX_SERVER_IP, SERVER_PORT))
+}
+
+/// Returns the wildcard address the server socket actually binds.
+///
+/// Binding `0.0.0.0:6902` instead of the fixed peer address keeps the socket
+/// alive across Wi-Fi flaps/DHCP renewals where `192.168.0.210` briefly
+/// disappears (which previously surfaced as `EADDRNOTAVAIL` at startup and,
+/// via systemd `StartLimitBurst=3`, escalated into a permanent
+/// `start-limit-hit`). Source trust is unchanged: `WindowsPeerIp::accepts`
+/// plus the peer-scoped firewall rules still drop everything not from
+/// `192.168.0.200`.
+#[must_use]
+pub const fn wildcard_bind_address() -> SocketAddr {
+    SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, SERVER_PORT))
 }
 
 /// The one Windows peer permitted to send control and audio datagrams.
@@ -53,7 +71,7 @@ pub struct UdpServerSocket {
 }
 
 impl UdpServerSocket {
-    /// Binds the server socket on every IPv4 interface at UDP port 6902.
+    /// Binds the server socket on the wildcard IPv4 interface at UDP port 6902.
     ///
     /// Only datagrams from the fixed Windows peer `192.168.0.200` are exposed
     /// to later control/audio consumers. The source port is intentionally not
@@ -63,7 +81,7 @@ impl UdpServerSocket {
     ///
     /// Returns the operating-system error if the socket cannot be bound.
     pub fn bind() -> io::Result<Self> {
-        Self::bind_at(server_bind_address())
+        Self::bind_at(wildcard_bind_address())
     }
 
     fn bind_at(bind_address: SocketAddr) -> io::Result<Self> {
@@ -114,17 +132,26 @@ mod tests {
     use std::net::{Ipv4Addr, SocketAddr, UdpSocket};
 
     use super::{
-        server_bind_address, UdpServerSocket, WindowsPeerIp, LINUX_SERVER_IP, SERVER_PORT,
+        server_bind_address, wildcard_bind_address, UdpServerSocket, WindowsPeerIp,
+        LINUX_SERVER_IP, SERVER_PORT,
     };
 
     const CONTROL_TAG: u8 = 0x01;
     const AUDIO_TAG: u8 = 0x00;
 
     #[test]
-    fn network_binds_the_configured_linux_peer_address() {
+    fn network_documents_the_configured_linux_peer_address() {
         assert_eq!(
             server_bind_address(),
             SocketAddr::from((LINUX_SERVER_IP, SERVER_PORT))
+        );
+    }
+
+    #[test]
+    fn network_binds_wildcard_so_address_flaps_do_not_kill_the_service() {
+        assert_eq!(
+            wildcard_bind_address(),
+            SocketAddr::from((Ipv4Addr::UNSPECIFIED, SERVER_PORT))
         );
     }
 

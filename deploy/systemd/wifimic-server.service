@@ -1,15 +1,15 @@
 [Unit]
 Description=wifimic Linux microphone capture and UDP transmitter
-After=pipewire.service wireplumber.service
-Wants=pipewire.service wireplumber.service
-StartLimitIntervalSec=60
-StartLimitBurst=3
+After=network-online.target pipewire.service wireplumber.service
+Wants=network-online.target pipewire.service wireplumber.service
+StartLimitIntervalSec=300
+StartLimitBurst=10
 
 [Service]
 Type=simple
 ExecStart=%h/.local/bin/wifimic_server
-Restart=on-failure
-RestartSec=5
+Restart=always
+RestartSec=10
 
 # Security hardening
 NoNewPrivileges=yes
